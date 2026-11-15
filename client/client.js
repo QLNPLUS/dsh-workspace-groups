@@ -98,19 +98,33 @@ window.__ModuleLoader__.load({
       teal: ['#0E7490', '#2DC8EB'],
       slate: ['#61666B', '#CFD3D6'],
     }
-    /** Group glyphs as 16px stroke paths, so the accent colour is the only ink. */
+    /** Group glyphs as 24px stroke paths (Tabler Icons, MIT — see NOTICE). */
     const ICON_PATHS = {
-      folder: ['M2 5.4A1.4 1.4 0 0 1 3.4 4h2.7l1.1 1.4h4.4A1.4 1.4 0 0 1 13 6.8v3.9A1.4 1.4 0 0 1 11.6 12.1H3.4A1.4 1.4 0 0 1 2 10.7z'],
-      star: ['M8 2.2l1.75 3.55 3.9.52-2.85 2.72.72 3.9L8 11.1l-3.52 1.79.72-3.9L2.35 6.27l3.9-.52z'],
-      code: ['M5.6 4.5L2.3 8l3.3 3.5M10.4 4.5L13.7 8l-3.3 3.5M9.2 3.1L6.8 12.9'],
-      doc: ['M4 2.6h5.2L12 5.3v8.1H4z', 'M9 2.7v2.9h2.9', 'M5.8 8.2h4.4M5.8 10.4h3.2'],
-      box: ['M8 2.2l5.2 2.6v6.4L8 13.8 2.8 11.2V4.8z', 'M2.9 4.9L8 7.5l5.1-2.6M8 7.5v6.2'],
-      flask: ['M6.2 2.4v3.3L3.1 11.6a1.3 1.3 0 0 0 1.1 2h7.6a1.3 1.3 0 0 0 1.1-2L9.8 5.7V2.4z', 'M5.6 2.4h4.8'],
-      rocket: ['M8 2.3c2.1 1.3 3.2 3.5 3.2 5.9 0 1.2-.3 2.3-.8 3.2H5.6a7.2 7.2 0 0 1-.8-3.2c0-2.4 1.1-4.6 3.2-5.9z'],
-      bug: ['M8 4.6a3.6 3.6 0 0 1 3.6 3.7v.6a3.6 3.6 0 0 1-3.6 2.7 3.6 3.6 0 0 1-3.6-2.7v-.6A3.6 3.6 0 0 1 8 4.6z', 'M8 4.4V2.9M4.6 5.6L3.2 4.6M11.4 5.6l1.4-1M4.4 9.4H2.8M11.6 9.4h1.6M5 12.4l-1.2 1.2M11 12.4l1.2 1.2'],
+      folder: ['M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2'],
+      star: ['M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873l-6.158 -3.245'],
+      heart: ['M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572'],
+      flag: ['M5 5a5 5 0 0 1 7 0a5 5 0 0 0 7 0v9a5 5 0 0 1 -7 0a5 5 0 0 0 -7 0v-9', 'M5 21v-7'],
+      bookmark: ['M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4'],
+      bolt: ['M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11'],
+      flame: ['M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235'],
+      rocket: ['M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3', 'M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3', 'M14 9a1 1 0 1 0 2 0a1 1 0 1 0 -2 0'],
+      bug: ['M9 9v-1a3 3 0 0 1 6 0v1', 'M8 9h8a6 6 0 0 1 1 3v3a5 5 0 0 1 -10 0v-3a6 6 0 0 1 1 -3', 'M3 13l4 0', 'M17 13l4 0', 'M12 20l0 -6', 'M4 19l3.35 -2', 'M20 19l-3.35 -2', 'M4 7l3.75 2.4', 'M20 7l-3.75 2.4'],
+      code: ['M7 8l-4 4l4 4', 'M17 8l4 4l-4 4', 'M14 4l-4 16'],
+      terminal: ['M5 7l5 5l-5 5', 'M12 19l7 0'],
+      book: ['M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0', 'M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0', 'M3 6l0 13', 'M12 6l0 13', 'M21 6l0 13'],
+      bulb: ['M3 12h1m8 -9v1m8 8h1m-15.4 -6.4l.7 .7m12.1 -.7l-.7 .7', 'M9 16a5 5 0 1 1 6 0a3.5 3.5 0 0 0 -1 3a2 2 0 0 1 -4 0a3.5 3.5 0 0 0 -1 -3', 'M9.7 17l4.6 0'],
+      briefcase: ['M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9', 'M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2', 'M12 12l0 .01', 'M3 13a20 20 0 0 0 18 0'],
+      home: ['M5 12l-2 0l9 -9l9 9l-2 0', 'M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7', 'M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6'],
+      flask: ['M9 3l6 0', 'M10 9l4 0', 'M10 3v6l-4 11a.7 .7 0 0 0 .5 1h11a.7 .7 0 0 0 .5 -1l-4 -11v-6'],
+      palette: ['M12 21a9 9 0 0 1 0 -18c4.97 0 9 3.582 9 8c0 1.06 -.474 2.078 -1.318 2.828c-.844 .75 -1.989 1.172 -3.182 1.172h-2.5a2 2 0 0 0 -1 3.75a1.3 1.3 0 0 1 -1 2.25', 'M7.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M11.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M15.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0'],
+      music: ['M3 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0', 'M13 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0', 'M9 17v-13h10v13', 'M9 8h10'],
+      world: ['M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0', 'M3.6 9h16.8', 'M3.6 15h16.8', 'M11.5 3a17 17 0 0 0 0 18', 'M12.5 3a17 17 0 0 1 0 18'],
+      lock: ['M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6', 'M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0', 'M8 11v-4a4 4 0 1 1 8 0v4'],
+      // Not offered in the picker: the "Ungrouped" bucket's neutral marker.
       dot: [],
     }
-    const ICONS = Object.keys(ICON_PATHS)
+    /** What the picker offers; `dot` is a renderer-only glyph, not a choice. */
+    const ICONS = Object.keys(ICON_PATHS).filter(icon => icon !== 'dot')
 
     // ═══════════════════════════════════════════════════════════════════
     // Dictionary — the locale service requires both locales at registration
@@ -146,10 +160,8 @@ window.__ModuleLoader__.load({
       'row.empty': '还没有对话',
       'row.untitled': '未命名对话',
       'row.blank': '新对话',
-      'menu.renameGroup': '重命名分组…',
+      'menu.editGroup': '编辑分组…',
       'menu.renameProject': '重命名项目…',
-      'menu.color': '颜色',
-      'menu.icon': '图标',
       'menu.pin': '固定到顶部',
       'menu.unpin': '取消固定',
       'menu.collapse': '收起分组',
@@ -161,14 +173,17 @@ window.__ModuleLoader__.load({
       'menu.moveTo': '移动到组',
       'menu.moveOut': '移出分组',
       'menu.deleteProject': '删除项目…',
-      'dlg.ok': '确定',
+      'dlg.ok': '保存',
+      'dlg.save': '保存',
       'dlg.cancel': '取消',
       'dlg.delete': '删除',
       'dlg.name': '名称',
+      'dlg.icon': '图标',
+      'dlg.color': '颜色',
       'dlg.newGroupTitle': '新建分组',
       'dlg.newGroupHint': '分组只影响左侧栏的归类，不移动、不复制任何目录。',
       'dlg.namePlaceholder': '例如：客户端项目',
-      'dlg.renameGroupTitle': '重命名分组',
+      'dlg.editGroupTitle': '编辑分组',
       'dlg.renameProjectTitle': '重命名项目',
       'dlg.deleteGroupTitle': '删除分组「{name}」',
       'dlg.deleteDissolve': '解散组（项目回到未分组）',
@@ -203,13 +218,24 @@ window.__ModuleLoader__.load({
       'color.slate': '石板灰',
       'icon.folder': '文件夹',
       'icon.star': '星标',
-      'icon.code': '代码',
-      'icon.doc': '文档',
-      'icon.box': '方块',
-      'icon.flask': '实验',
+      'icon.heart': '爱心',
+      'icon.flag': '旗帜',
+      'icon.bookmark': '书签',
+      'icon.bolt': '闪电',
+      'icon.flame': '火焰',
       'icon.rocket': '火箭',
       'icon.bug': '缺陷',
-      'icon.dot': '圆点',
+      'icon.code': '代码',
+      'icon.terminal': '终端',
+      'icon.book': '书本',
+      'icon.bulb': '灯泡',
+      'icon.briefcase': '公文包',
+      'icon.home': '主页',
+      'icon.flask': '实验',
+      'icon.palette': '调色板',
+      'icon.music': '音乐',
+      'icon.world': '地球',
+      'icon.lock': '锁定',
       'a11y.tree': '工作区分组树',
       'a11y.group': '分组 {name}，{n} 个项目',
       'a11y.project': '项目 {name}，{n} 个对话',
@@ -247,10 +273,8 @@ window.__ModuleLoader__.load({
       'row.empty': 'No conversations yet',
       'row.untitled': 'Untitled conversation',
       'row.blank': 'New conversation',
-      'menu.renameGroup': 'Rename group…',
+      'menu.editGroup': 'Edit group…',
       'menu.renameProject': 'Rename project…',
-      'menu.color': 'Color',
-      'menu.icon': 'Icon',
       'menu.pin': 'Pin to top',
       'menu.unpin': 'Unpin',
       'menu.collapse': 'Collapse group',
@@ -262,14 +286,17 @@ window.__ModuleLoader__.load({
       'menu.moveTo': 'Move to group',
       'menu.moveOut': 'Remove from group',
       'menu.deleteProject': 'Delete project…',
-      'dlg.ok': 'OK',
+      'dlg.ok': 'Save',
+      'dlg.save': 'Save',
       'dlg.cancel': 'Cancel',
       'dlg.delete': 'Delete',
       'dlg.name': 'Name',
+      'dlg.icon': 'Icon',
+      'dlg.color': 'Color',
       'dlg.newGroupTitle': 'New group',
       'dlg.newGroupHint': 'A group only organizes the sidebar; no directory is moved or copied.',
       'dlg.namePlaceholder': 'e.g. Client projects',
-      'dlg.renameGroupTitle': 'Rename group',
+      'dlg.editGroupTitle': 'Edit group',
       'dlg.renameProjectTitle': 'Rename project',
       'dlg.deleteGroupTitle': 'Delete group "{name}"',
       'dlg.deleteDissolve': 'Dissolve the group (projects return to Ungrouped)',
@@ -304,13 +331,24 @@ window.__ModuleLoader__.load({
       'color.slate': 'Slate',
       'icon.folder': 'Folder',
       'icon.star': 'Star',
-      'icon.code': 'Code',
-      'icon.doc': 'Document',
-      'icon.box': 'Box',
-      'icon.flask': 'Experiment',
+      'icon.heart': 'Heart',
+      'icon.flag': 'Flag',
+      'icon.bookmark': 'Bookmark',
+      'icon.bolt': 'Bolt',
+      'icon.flame': 'Flame',
       'icon.rocket': 'Rocket',
       'icon.bug': 'Bug',
-      'icon.dot': 'Dot',
+      'icon.code': 'Code',
+      'icon.terminal': 'Terminal',
+      'icon.book': 'Book',
+      'icon.bulb': 'Idea',
+      'icon.briefcase': 'Briefcase',
+      'icon.home': 'Home',
+      'icon.flask': 'Experiment',
+      'icon.palette': 'Palette',
+      'icon.music': 'Music',
+      'icon.world': 'Globe',
+      'icon.lock': 'Lock',
       'a11y.tree': 'Workspace group tree',
       'a11y.group': 'Group {name}, {n} projects',
       'a11y.project': 'Project {name}, {n} conversations',
@@ -802,14 +840,19 @@ window.__ModuleLoader__.load({
     // Atoms
     // ═══════════════════════════════════════════════════════════════════
 
+    /**
+     * One group glyph. The path table is Tabler's 24×24 outline set, so the
+     * viewBox is 24 and the stroke width is Tabler's own 2 — scaling a 24-grid
+     * icon into a 16 viewBox would fatten every stroke by half again.
+     */
     const GroupGlyph = ({ icon, className }) => {
       const paths = ICON_PATHS[icon] ?? ICON_PATHS.folder
       if (paths.length === 0) return h('span', { className: cx('dwg-glyph', 'dwg-glyphDot', className), 'aria-hidden': 'true' })
       return h(
         'svg',
-        { className: cx('dwg-glyph', className), viewBox: '0 0 16 16', width: 14, height: 14, 'aria-hidden': 'true', focusable: 'false' },
+        { className: cx('dwg-glyph', className), viewBox: '0 0 24 24', width: 14, height: 14, 'aria-hidden': 'true', focusable: 'false' },
         paths.map((d, index) => h('path', {
-          key: index, d, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
+          key: index, d, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
         })),
       )
     }
@@ -1335,8 +1378,26 @@ window.__ModuleLoader__.load({
      *     destructive branch needs a second, explicit choice;
      *   - delete project: a single confirmation.
      */
+    /** A 10-column swatch grid is the widest that fits a 360px dialog body. */
+    const ICON_GRID_COLUMNS = 10
+
+    /**
+     * One dialog for every group edit: create, and rename + recolour + re-icon.
+     *
+     * The three properties used to live in three places — a name dialog, a
+     * "颜色 →" submenu and an "图标 →" submenu — which meant changing a group's
+     * look took three menu trips and no single place showed the current
+     * combination. They describe one object (a folder's appearance), so they
+     * belong in one form, exactly like a file manager's folder properties sheet.
+     *
+     * Icon and colour are still PRESETS, not free choice: a fixed palette keeps
+     * every accent legible in both themes, which a colour wheel cannot promise.
+     */
     const Dialog = ({ draft, t, busy, onCancel, onSubmit }) => {
+      const editing = draft.kind === 'renameGroup'
       const [name, setName] = useState(draft.kind === 'create' ? '' : (draft.name ?? ''))
+      const [color, setColor] = useState(draft.color ?? 'blue')
+      const [icon, setIcon] = useState(draft.icon ?? 'folder')
       const [withProjects, setWithProjects] = useState(false)
       const input = useRef(null)
 
@@ -1358,21 +1419,29 @@ window.__ModuleLoader__.load({
       const title = draft.kind === 'create'
         ? t('dlg.newGroupTitle')
         : draft.kind === 'renameGroup'
-          ? t('dlg.renameGroupTitle')
+          ? t('dlg.editGroupTitle')
           : draft.kind === 'renameProject'
             ? t('dlg.renameProjectTitle')
             : draft.kind === 'deleteGroup'
               ? t('dlg.deleteGroupTitle', { name: draft.name ?? '' })
               : t('dlg.deleteProjectTitle', { name: draft.name ?? '' })
 
-      const needsName = draft.kind === 'create' || draft.kind === 'renameGroup' || draft.kind === 'renameProject'
+      /** The appearance half is shown while creating and while editing a group. */
+      const appearance = draft.kind === 'create' || editing
+      const needsName = draft.kind === 'create' || editing || draft.kind === 'renameProject'
       const deleting = draft.kind === 'deleteGroup' || draft.kind === 'deleteProject'
       const canSubmit = !busy && (needsName ? name.trim().length > 0 : true)
+      /** The live preview follows the swatch grid, so a pick is visible before Save. */
+      const accent = PALETTE[color][0]
 
       const submit = (event) => {
         event?.preventDefault?.()
         if (!canSubmit) return
-        onSubmit(draft.kind === 'deleteGroup' ? { withProjects } : { name: name.trim() })
+        onSubmit(draft.kind === 'deleteGroup'
+          ? { withProjects }
+          : appearance
+            ? { name: name.trim(), color, icon }
+            : { name: name.trim() })
       }
 
       const body = h(
@@ -1381,7 +1450,7 @@ window.__ModuleLoader__.load({
         h(
           'form',
           {
-            className: 'dwg-dialog',
+            className: cx('dwg-dialog', appearance && 'dwg-dialogWide'),
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': title,
@@ -1403,6 +1472,51 @@ window.__ModuleLoader__.load({
                 placeholder: draft.kind === 'create' ? t('dlg.namePlaceholder') : '',
                 onChange: event => setName(event.target.value),
               }),
+            )
+            : null,
+          appearance
+            ? h(
+              'div',
+              { className: 'dwg-field' },
+              h('span', { className: 'dwg-fieldLabel' }, t('dlg.icon')),
+              h(
+                'div',
+                { className: 'dwg-iconGrid', role: 'group', 'aria-label': t('dlg.icon') },
+                ICONS.map(key => h(
+                  'button',
+                  {
+                    key,
+                    type: 'button',
+                    className: cx('dwg-iconCell', icon === key && 'dwg-iconCellOn'),
+                    'aria-label': t(`icon.${key}`),
+                    'aria-pressed': icon === key,
+                    title: t(`icon.${key}`),
+                    style: icon === key ? { color: accent } : undefined,
+                    onClick: () => setIcon(key),
+                  },
+                  h(GroupGlyph, { icon: key, className: 'dwg-glyphCell' }),
+                )),
+              ),
+            )
+            : null,
+          appearance
+            ? h(
+              'div',
+              { className: 'dwg-field' },
+              h('span', { className: 'dwg-fieldLabel' }, t('dlg.color')),
+              h(
+                'div',
+                { className: 'dwg-colorRow', role: 'group', 'aria-label': t('dlg.color') },
+                COLORS.map(key => h('button', {
+                  key,
+                  type: 'button',
+                  className: cx('dwg-swatch', `dwg-accent-${key}`, color === key && 'dwg-swatchOn'),
+                  'aria-label': t(`color.${key}`),
+                  'aria-pressed': color === key,
+                  title: t(`color.${key}`),
+                  onClick: () => setColor(key),
+                })),
+              ),
             )
             : null,
           draft.kind === 'create' ? h('div', { className: 'dwg-dialogHint' }, t('dlg.newGroupHint')) : null,
@@ -1436,7 +1550,7 @@ window.__ModuleLoader__.load({
             h(
               'button',
               { type: 'submit', className: cx('dwg-btn', 'dwg-btnPrimary', deleting && 'dwg-btnDanger'), disabled: !canSubmit },
-              busy ? '…' : deleting ? t('dlg.delete') : t('dlg.ok'),
+              busy ? '…' : deleting ? t('dlg.delete') : t('dlg.save'),
             ),
           ),
         ),
@@ -1774,27 +1888,10 @@ window.__ModuleLoader__.load({
           },
           { id: 'newProject', label: t('menu.newProject'), run: () => { void newProject(group.id) } },
           { id: 'sep1', separatorBefore: true, label: '' },
-          { id: 'rename', label: t('menu.renameGroup'), run: () => openDialog({ kind: 'renameGroup', groupId: group.id, name: group.name }) },
-          {
-            id: 'color',
-            label: t('menu.color'),
-            children: COLORS.map(color => ({
-              id: `color-${color}`,
-              label: t(`color.${color}`),
-              checked: group.color === color,
-              run: () => { void commit('updateGroup', { groupId: group.id, color }) },
-            })),
-          },
-          {
-            id: 'icon',
-            label: t('menu.icon'),
-            children: ICONS.map(icon => ({
-              id: `icon-${icon}`,
-              label: t(`icon.${icon}`),
-              checked: group.icon === icon,
-              run: () => { void commit('updateGroup', { groupId: group.id, icon }) },
-            })),
-          },
+          { id: 'edit', label: t('menu.editGroup'), run: () => openDialog({ kind: 'renameGroup', groupId: group.id, name: group.name, color: group.color, icon: group.icon }) },
+          // Colour and icon now live in the edit dialog, not in two submenus: they
+          // are two properties of one appearance sheet, and a submenu that only
+          // sets one of them hides the current combination of both.
           {
             id: 'pin',
             label: group.pinned ? t('menu.unpin') : t('menu.pin'),
@@ -1856,9 +1953,14 @@ window.__ModuleLoader__.load({
         setBusy(true)
         try {
           if (draft.kind === 'create') {
-            await commit('createGroup', { name: values.name, color: 'blue', icon: 'folder' })
+            await commit('createGroup', { name: values.name, color: values.color, icon: values.icon })
           } else if (draft.kind === 'renameGroup') {
-            await commit('updateGroup', { groupId: draft.groupId, name: values.name })
+            await commit('updateGroup', {
+              groupId: draft.groupId,
+              name: values.name,
+              color: values.color,
+              icon: values.icon,
+            })
           } else if (draft.kind === 'renameProject') {
             const ws = injected.ws()
             if (ws !== undefined) await service('dlg.renameFailed', () => ws.rename(draft.workspaceId, values.name))
@@ -2215,6 +2317,8 @@ window.__ModuleLoader__.load({
 .dwg-chevron{flex:0 0 auto;color:var(--dsw-alias-label-tertiary);transition:transform .12s ease}
 .dwg-chevronOpen{transform:rotate(90deg)}
 .dwg-glyph{flex:0 0 auto;color:var(--dsw-alias-label-secondary)}
+/* The picker draws at 16px inside a 30px cell; the row header keeps 14px. */
+.dwg-glyphCell{width:16px;height:16px}
 .dwg-glyphAccent{color:var(--dwg-accent)}
 .dwg-glyphMuted{color:var(--dsw-alias-label-tertiary)}
 .dwg-glyphDot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dwg-accent)}
@@ -2264,11 +2368,26 @@ window.__ModuleLoader__.load({
 .dwg-menuSep{height:1px;margin:3px 2px;background:var(--dsw-alias-border-l2)}
 .dwg-scrim{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgb(0 0 0 / 32%);z-index:1100}
 .dwg-dialog{box-sizing:border-box;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px));padding:16px;border-radius:14px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);box-shadow:0 16px 48px rgb(0 0 0 / 24%)}
+/* The appearance sheet needs room for a 10-column swatch grid without the icons
+   crushed into 20px cells. */
+.dwg-dialogWide{width:min(400px,calc(100vw - 32px))}
 .dwg-dialogTitle{font-size:14px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}
 .dwg-field{display:flex;flex-direction:column;gap:4px}
 .dwg-fieldLabel{font-size:12px;line-height:17px;color:var(--dsw-alias-label-secondary)}
 .dwg-input{box-sizing:border-box;height:30px;padding:0 8px;border-radius:8px;border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit}
 .dwg-input:focus{outline:0;border-color:var(--dsw-alias-state-business-primary)}
+/* Preset pickers: a fixed grid, not a free picker. Ten columns of 30px cells fit
+   the 400px sheet with its 16px padding; the swatch row below reuses the same
+   rhythm so the two groups read as one form. */
+.dwg-iconGrid{display:grid;grid-template-columns:repeat(10,1fr);gap:2px}
+.dwg-iconCell{display:flex;align-items:center;justify-content:center;height:30px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;padding:0}
+.dwg-iconCell:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.dwg-iconCellOn{background:var(--dsw-alias-interactive-bg-hover);border:1px solid var(--dsw-alias-border-l3)}
+.dwg-colorRow{display:flex;flex-wrap:wrap;gap:8px;padding:2px 0}
+.dwg-swatch{width:22px;height:22px;box-sizing:border-box;border:0;border-radius:50%;background:var(--dwg-accent);cursor:pointer;padding:0}
+/* The selected swatch grows a ring rather than a tick: a tick on ten different
+   accent hues needs its own contrast guarantee per hue. */
+.dwg-swatchOn{box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1),0 0 0 4px var(--dsw-alias-state-business-primary)}
 .dwg-dialogHint{font-size:12px;line-height:17px;color:var(--dsw-alias-label-tertiary)}
 .dwg-choice{display:flex;flex-direction:column;gap:6px}
 .dwg-choiceRow{display:flex;align-items:flex-start;gap:8px;padding:8px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);cursor:pointer}
@@ -2288,7 +2407,7 @@ window.__ModuleLoader__.load({
    NB: no backticks anywhere in this stylesheet — it is a template literal. */
 .dwg-btnPrimary{border-color:var(--dsw-alias-button-primary-fill);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}
 .dwg-btnDanger{--dsw-alias-button-primary-fill:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-button-primary-fill);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}
-.dwg-root:focus-visible,.dwg-row:focus-visible,.dwg-iconBtn:focus-visible,.dwg-moreBtn:focus-visible,.dwg-btn:focus-visible,.dwg-viewBtn:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}
+.dwg-root:focus-visible,.dwg-row:focus-visible,.dwg-iconBtn:focus-visible,.dwg-moreBtn:focus-visible,.dwg-btn:focus-visible,.dwg-viewBtn:focus-visible,.dwg-iconCell:focus-visible,.dwg-swatch:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}
 ${COLORS.map(color => `.dwg-accent-${color}{--dwg-accent:${PALETTE[color][0]}}`).join('\n')}
 ${COLORS.map(color => `body[data-ds-dark-theme] .dwg-accent-${color}{--dwg-accent:${PALETTE[color][1]}}`).join('\n')}
 @media (prefers-reduced-motion:reduce){.dwg-chevron{transition:none}}

@@ -57,9 +57,9 @@ const DOCUMENT = {
   version: 1,
   groups: [
     { id: 'g1', name: '客户端项目', color: 'blue', icon: 'code', pinned: true, collapsed: false, order: 0, createdAt: 1 },
-    { id: 'g2', name: '学习', color: 'green', icon: 'doc', pinned: false, collapsed: false, order: 0, createdAt: 2 },
+    { id: 'g2', name: '学习', color: 'green', icon: 'book', pinned: false, collapsed: false, order: 0, createdAt: 2 },
   ],
-  archivedGroups: [{ id: 'g3', name: '旧项目', color: 'slate', icon: 'box' }],
+  archivedGroups: [{ id: 'g3', name: '旧项目', color: 'slate', icon: 'briefcase' }],
   assign: { w2: 'g1', w3: 'g2' },
   orders: { g1: ['w2'], g2: ['w3'], __ungrouped__: ['w1'] },
   workspaceState: { w2: { expanded: true, showAll: true } },
@@ -375,12 +375,16 @@ if (mountError === null) {
     check('the menu is portalled to the body, not nested in the region',
       menu !== null && menu.parentElement === document.body,
       menu === null ? '' : `parent is <${menu.parentElement?.tagName?.toLowerCase()}>`)
-    check('the menu lists the group actions', menu !== null && menu.innerHTML.includes('重命名分组'))
+    check('the menu lists the group actions', menu !== null && menu.innerHTML.includes('编辑分组'))
     check('the menu offers the fold action', menu !== null && menu.innerHTML.includes('收起分组')
       || menu !== null && menu.innerHTML.includes('展开分组'),
       'the header click is the fast path; the menu row is the discoverable one')
-    check('the menu offers a real submenu', menu !== null && menu.innerHTML.includes('移动到组')
-      || menu !== null && menu.innerHTML.includes('颜色'))
+    // The GROUP menu has no submenus left: colour and icon moved into the edit
+    // dialog, and reordering belongs to drag. "移动到组" survives on the PROJECT
+    // menu, which is where a submenu still makes sense.
+    check('the group menu has no submenus left',
+      menu !== null && !menu.innerHTML.includes('dwg-menuArrow'),
+      menu === null ? '' : menu.innerHTML.slice(0, 160))
     // Escape through a real keydown.
     await act(async () => {
       document.dispatchEvent(new jsdomWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
@@ -513,8 +517,35 @@ if (mountError === null) {
     check('the dialog is portalled', dialog !== null && dialog.closest('body') !== null
       && dialog.parentElement?.parentElement === document.body)
     check('the dialog asks for a name', dialog !== null && dialog.querySelector('input') !== null)
-    check('the dialog disables OK on an empty name',
+    check('the dialog disables Save on an empty name',
       dialog !== null && [...dialog.querySelectorAll('button')].some(button => button.disabled === true))
+
+    // ── the appearance sheet: icon and colour pickers in the SAME dialog ──
+    // These used to be two submenus, which meant changing a group's look took
+    // three menu trips and no screen showed the current combination.
+    const iconCells = [...(dialog?.querySelectorAll('.dwg-iconCell') ?? [])]
+    const swatches = [...(dialog?.querySelectorAll('.dwg-swatch') ?? [])]
+    check('the dialog shows a preset icon picker', iconCells.length === 20, `${iconCells.length} icons`)
+    check('the dialog shows a preset colour picker', swatches.length === 10, `${swatches.length} swatches`)
+    check('the icon picker offers every accent colour too', swatches.every(swatch =>
+      [...swatch.classList].some(name => name.startsWith('dwg-accent-'))))
+    check('the pickers are labelled for screen readers',
+      dialog?.querySelectorAll('[role="group"][aria-label]').length === 2,
+      String(dialog?.querySelectorAll('[role="group"][aria-label]').length))
+    // Pick the sixth icon and the fifth swatch, then confirm both reach the Host.
+    const chosenIcon = iconCells[5]
+    const chosenSwatch = swatches[4]
+    check('an icon cell is a real button', chosenIcon?.tagName === 'BUTTON', String(chosenIcon?.tagName))
+    check('a swatch is a real button', chosenSwatch?.tagName === 'BUTTON', String(chosenSwatch?.tagName))
+    if (chosenIcon !== undefined && chosenSwatch !== undefined) {
+      await click(chosenIcon)
+      await click(chosenSwatch)
+      const pressed = dialog.querySelector('.dwg-iconCellOn')
+      check('the picked icon becomes the selected one', pressed !== null
+        && pressed.getAttribute('aria-pressed') === 'true')
+      check('the picked swatch becomes the selected one',
+        dialog.querySelector('.dwg-swatchOn') !== null)
+    }
 
     // Type a name and submit through the real form.
     const input = dialog.querySelector('input')
@@ -524,15 +555,56 @@ if (mountError === null) {
       input.dispatchEvent(new jsdomWindow.Event('input', { bubbles: true }))
     })
     const submit = dialog.querySelector('button[type="submit"]')
-    check('OK enables once a name is typed', submit !== null && submit.disabled === false)
+    check('Save enables once a name is typed', submit !== null && submit.disabled === false)
     await act(async () => {
       dialog.dispatchEvent(new jsdomWindow.Event('submit', { bubbles: true, cancelable: true }))
     })
-    check('submitting creates the group', calls.some(call => call.method === 'POST'
-      && JSON.parse(call.body).action === 'createGroup'
-      && JSON.parse(call.body).payload.name === '新分组'))
+    const created = calls.filter(call => call.method === 'POST'
+      && JSON.parse(call.body).action === 'createGroup').at(-1)
+    check('submitting creates the group', created !== undefined
+      && JSON.parse(created.body).payload.name === '新分组')
+    check('the dialog carries the picked icon to the Host',
+      created !== undefined && JSON.parse(created.body).payload.icon === 'bolt',
+      created === undefined ? '' : JSON.parse(created.body).payload.icon)
+    check('the dialog carries the picked colour to the Host',
+      created !== undefined && JSON.parse(created.body).payload.color === 'red',
+      created === undefined ? '' : JSON.parse(created.body).payload.color)
     check('the dialog closes after submit', document.querySelector('[role="dialog"]') === null)
     check('the created group is in the DOM', html().includes('新分组'))
+  }
+
+  // ── editing an existing group lands all three properties at once ────
+  const groupRowForEdit = container.querySelector('[data-dwg-group="g2"]')
+  check('a group is addressable for editing', groupRowForEdit !== null)
+  if (groupRowForEdit !== null) {
+    await click(groupRowForEdit.querySelector('.dwg-iconBtnMenu'))
+    const editEntry = [...document.querySelectorAll('.dwg-menu [role="menuitem"]')]
+      .find(item => item.textContent?.trim() === '编辑分组…')
+    check('the group menu offers one edit entry', editEntry !== undefined)
+    if (editEntry !== undefined) {
+      await click(editEntry)
+      const editDialog = document.querySelector('[role="dialog"]')
+      check('editing opens the same dialog', editDialog !== null)
+      check('the edit dialog starts from the group\'s current name',
+        editDialog?.querySelector('input')?.value === '学习',
+        String(editDialog?.querySelector('input')?.value))
+      check('the edit dialog starts from the group\'s current colour',
+        editDialog?.querySelector('.dwg-swatchOn')?.classList.contains('dwg-accent-green') === true,
+        String(editDialog?.querySelector('.dwg-swatchOn')?.className))
+      const editSwatch = [...(editDialog?.querySelectorAll('.dwg-swatch') ?? [])]
+        .find(swatch => swatch.classList.contains('dwg-accent-teal'))
+      if (editSwatch !== undefined) await click(editSwatch)
+      await act(async () => {
+        editDialog.dispatchEvent(new jsdomWindow.Event('submit', { bubbles: true, cancelable: true }))
+      })
+      const update = calls.filter(call => call.method === 'POST'
+        && JSON.parse(call.body).action === 'updateGroup').at(-1)
+      check('saving the edit sends one updateGroup with all three fields', update !== undefined
+        && JSON.parse(update.body).payload.name === '学习'
+        && JSON.parse(update.body).payload.color === 'teal'
+        && JSON.parse(update.body).payload.icon === 'book',
+        update === undefined ? '' : update.body)
+    }
   }
 
   // ── unmount ─────────────────────────────────────────────────────────

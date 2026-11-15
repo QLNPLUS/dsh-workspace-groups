@@ -121,7 +121,7 @@ check('a new group is unpinned and expanded', first.pinned === false && first.co
 check('the group gets a stable id', typeof first.id === 'string' && first.id.length > 0, String(first.id))
 const gid = first.id
 
-next = await primary.call(mod.MUTATE_PATH, { action: 'createGroup', payload: { name: '学习', color: 'green', icon: 'doc' } })
+next = await primary.call(mod.MUTATE_PATH, { action: 'createGroup', payload: { name: '学习', color: 'green', icon: 'book' } })
 const gid2 = next.payload.groups.find(group => group.name === '学习')?.id
 check('a second group coexists', next.payload.groups.length === 2 && typeof gid2 === 'string')
 check('group ids are distinct', gid !== gid2)
@@ -287,7 +287,7 @@ check('prune drops assignments for unknown workspaces', Object.keys(next.payload
 // ═══════════════════════════════════════════════════════════════════════
 
 console.log('▸ persistence')
-await primary.call(mod.MUTATE_PATH, { action: 'createGroup', payload: { name: '持久化', color: 'violet', icon: 'box' } })
+await primary.call(mod.MUTATE_PATH, { action: 'createGroup', payload: { name: '持久化', color: 'violet', icon: 'briefcase' } })
 const reread = await primary.call(mod.STATE_PATH)
 check('a re-read reflects the latest mutation', reread.payload.groups.some(group => group.name === '持久化'),
   JSON.stringify(reread.payload.groups.map(group => group.name)))

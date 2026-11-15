@@ -39,8 +39,11 @@ const MAX_BODY_BYTES = 64 * 1024
 
 /** Preset accents; the browser owns the exact hex values for both themes. */
 const COLORS = new Set(['blue', 'indigo', 'violet', 'rose', 'red', 'orange', 'amber', 'green', 'teal', 'slate'])
-/** Preset glyphs; the browser draws each one. */
-const ICONS = new Set(['folder', 'star', 'code', 'doc', 'box', 'flask', 'rocket', 'bug', 'dot'])
+/** Preset glyphs; the browser draws each one. Mirrors the client's ICON_PATHS table. */
+const ICONS = new Set([
+  'folder', 'star', 'heart', 'flag', 'bookmark', 'bolt', 'flame', 'rocket', 'bug',
+  'code', 'terminal', 'book', 'bulb', 'briefcase', 'home', 'flask', 'palette', 'music', 'world', 'lock',
+])
 /** Upper bounds that keep a corrupted state file from growing without limit. */
 const LIMITS = { groups: 200, archived: 200, nameLength: 40, idLength: 64 }
 

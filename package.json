@@ -19,6 +19,7 @@
     "cordis.patch.yml",
     "icon.svg",
     "README.md",
+    "NOTICE.md",
     "LICENSE"
   ],
   "keywords": [

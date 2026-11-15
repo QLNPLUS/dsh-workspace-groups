@@ -70,10 +70,10 @@ const HOST_DOCUMENT = {
   version: 1,
   groups: [
     { id: 'g1', name: '客户端项目', color: 'blue', icon: 'code', pinned: true, collapsed: false, order: 0, createdAt: 1 },
-    { id: 'g2', name: '学习', color: 'green', icon: 'doc', pinned: false, collapsed: false, order: 0, createdAt: 2 },
+    { id: 'g2', name: '学习', color: 'green', icon: 'book', pinned: false, collapsed: false, order: 0, createdAt: 2 },
     { id: 'g4', name: '待整理', color: 'amber', icon: 'star', pinned: false, collapsed: true, order: 1, createdAt: 3 },
   ],
-  archivedGroups: [{ id: 'g3', name: '旧项目', color: 'slate', icon: 'box' }],
+  archivedGroups: [{ id: 'g3', name: '旧项目', color: 'slate', icon: 'briefcase' }],
   assign: { w2: 'g1', w3: 'g2', w4: 'g4' },
   orders: { g1: ['w2'], g2: ['w3'], g4: ['w4'], __ungrouped__: ['w1'] },
   workspaceState: { w2: { expanded: true, showAll: false } },
