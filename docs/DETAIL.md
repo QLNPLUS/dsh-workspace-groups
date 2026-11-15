@@ -179,11 +179,21 @@ reconcileOrder(members, stored)  // stored ∩ live，按 stored 相对顺序；
 
 `PopupMenu` 的键盘支持刻意做得小：`Escape` 关闭、`↑`/`↓` 移动焦点、`Enter` 激活；点外面关闭。子菜单用 `onMouseEnter`/`onFocus` 打开。
 
-**定位是量出来的，不是猜的。** 每个菜单都从「打开它的那个控件」拿一个点（`pointOf(button)` = 控件左下角 + 2px），第一遍先以 `visibility:hidden` 画在锚点处，`useEffect` 量到真实尺寸后再夹进视口（`left ≤ innerWidth - width - 8`、`top ≤ innerHeight - height - 8`）。先量后画的意义在于：菜单高度取决于条目数，靠猜的高度一定会让菜单要么越界要么跳一下。
+**定位是量出来的，不是猜的。** 每个菜单都从「打开它的那个控件」拿一个点（`pointOf(button)` = 控件左下角 + 2px），第一遍以 `opacity: 0` + `pointer-events: none` 画在锚点处（不能用 `visibility: hidden`——隐藏元素拿不到焦点，而下一个 effect 正要把焦点移进菜单），`useLayoutEffect` 量到真实尺寸后再夹进视口（`left ≤ innerWidth - width - 8`、`top ≤ innerHeight - height - 8`）。先量后画的意义在于：菜单高度取决于条目数，靠猜的高度一定会让菜单要么越界要么跳一下。
 
 这一条也曾经错过一次：`RowActions` 的「⋯」按钮调用的是 `onMenu()`，**没带事件**，所以 `menu.anchor` 是 `undefined`，兜底分支把所有菜单画在视口左上角（用户的第一个反馈就是这张截图）。修法是把事件从 `IconButton` 一路传到 `RowActions`、再到 `pointOf`。`test/mount.mjs` 现在用一个 stub 的 `getBoundingClientRect` 钉住「菜单真的开在按钮上」和「靠近底边时被夹住而不是被裁掉」。
 
 组菜单第一项是「收起分组 / 展开分组」：组头点击虽然能折叠，但拖拽时误触也会折叠，而且键盘用户找不到入口。
+
+### 置顶与排序：payload 比视图更容易错
+
+「固定到顶部」和「调整顺序」在屏幕上表现为同一种故障——菜单开了、也点了，树纹丝不动。但树的推导一直是对的，错的是**发出去的 payload**：
+
+**1. 调整顺序：目的地不在自己的清单里。** `orderGroup` 的约定是「收到完整的目标顺序，把被移动的组插到 `beforeGroupId` 所在的下标」。第一版的子菜单在发送前把 `section.id` 也从 `order` 里剔掉了，于是那个下标永远是 `-1`，Host 只会追加到末尾——两个组的时候「追加到末尾」和「原地不动」看起来完全一样。修法：`order` 保留目的地，只剔除被移动的组自己。
+
+**2. 固定到顶部：看起来没反应其实是位置没变。** 置顶把组挪进 pinned 区段的最前面，可 pinned 区段和其余区段之间原本没有任何分隔，所以「从第 1 行挪到第 1 行」在视觉上是零变化。修法：pinned 区段和非 pinned 内容之间加一条 `.dwg-pinnedRule` 细线，并把「固定到顶部 / 取消固定」两项加上图钉字形——否则「取消固定」读起来像状态标签而不是动作。
+
+`test/mount.mjs` 的假服务器现在按 Host 的真实规则实现 `orderGroup`（目的地不在 `order` 里就追加），所以「payload 剔除了目的地」这一版会真的失败；测试同时断言点击后**行确实换了位置**，而不只是断言发了请求。
 
 ### 删除对话框的默认值
 
@@ -197,6 +207,8 @@ reconcileOrder(members, stored)  // stored ∩ live，按 stored 相对顺序；
 ### 搜索
 
 一个输入框搜三种名字。去抖 170ms（`SEARCH_DEBOUNCE_MS`），命中上限来自配置（`searchLimit`），超出时提示缩小范围。每条命中都带所属组/项目路径；点中后先展开对应节点（`updateGroup` / `setWorkspaceState`），再把它滚进视野。
+
+表头的放大镜是**一个按钮管开和关**：再按一次收起搜索框并清空查询词。第一版只写了「打开」分支，于是按钮第二次点击什么也不做——控件无法撤销自己的动作，用户只能按 Escape 或刷新页面。这类缺陷在测试里也容易漏，因为渲染一直是对的；`test/mount.mjs` 现在按两次并断言输入框消失、`aria-label` 在「搜索 / 收起搜索」之间来回切换。
 
 ### 状态徽标
 
@@ -243,6 +255,8 @@ token 分两类，别混用：`--dsw-alias-state-business-primary` 是**交互�
 | **菜单定位** | `test/mount.mjs`：stub `getBoundingClientRect`，断言菜单开在按钮上（不是视口左上角）、靠近底边被夹进视口、Escape 仍能关 | ✅ |
 | **token 语义** | `test/smoke.mjs`：样式表不出现 `--dsw-alias-brand-primary`（那是单色墨色不是强调色）、焦点环读平台 ring token、搜索框关掉自己的方块焦点环但仍由容器显示焦点 | ✅ |
 | 失败路径 | `test/mount.mjs`：路由返回 503 时画失败面而不是永久转圈，点「重试」真的再发一次请求 | ✅ |
+| **搜索开关** | `test/mount.mjs`：报表头放大镜两次——输入框出现/消失、`aria-label` 跟着翻转、带词关闭时查询词一起清掉 | ✅ |
+| **置顶 / 排序** | `test/mount.mjs`：假服务器按 Host 的真实插入规则实现 `orderGroup`；断言置顶后行真的移到 pinned 区首、子菜单「调整顺序」的 payload 保留目的地、行真的换了位置 | ✅ |
 | **实际观感** | 真浏览器页面（本会话的 client inspect 桥超时，无已认证页面） | ❌ 需用户确认 |
 | 真机交互 | 拖动（DnD 无法在 jsdom 里模拟数据载荷）、快捷键、重启后持久化 | ❌ 需用户确认 |
 

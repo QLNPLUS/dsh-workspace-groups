@@ -110,6 +110,29 @@ globalThis.fetch = async (path, init) => {
         group.collapsed = request.payload.collapsed
       }
     }
+    // Reordering: mirrors the Host rule that the moved group lands at the index
+    // its `beforeGroupId` occupies in the SENT list, so a payload that leaves
+    // the destination out appends instead. Reproducing that faithfully is what
+    // makes the "调整顺序 does nothing" regression assertable here.
+    if (request.action === 'orderGroup') {
+      serverDocument = structuredClone(serverDocument)
+      const { groupId, pinned, order, beforeGroupId } = request.payload
+      const group = serverDocument.groups.find(row => row.id === groupId)
+      if (group !== undefined) {
+        group.pinned = pinned === true
+        const peers = serverDocument.groups.filter(row => row.pinned === group.pinned && row.id !== groupId)
+        const sent = Array.isArray(order) ? order.filter(id => typeof id === 'string') : null
+        const targetIds = sent ?? peers.map(row => row.id)
+        const at = targetIds.indexOf(beforeGroupId ?? '')
+        const sequence = [...peers]
+        sequence.splice(at === -1 ? sequence.length : at, 0, group)
+        sequence.forEach((row, slot) => { row.order = slot })
+        const tail = sequence.length
+        for (const row of serverDocument.groups) {
+          if (row.pinned === group.pinned && !sequence.includes(row) && row.order >= tail) row.order = tail
+        }
+      }
+    }
   }
   return { ok: true, status: 200, json: async () => serverDocument }
 }
@@ -287,6 +310,44 @@ if (mountError === null) {
       'the row set expanded:false on a project that was expanded, so its children collapse')
   }
 
+  // ── the search toggle: one button opens AND closes the field ─────────
+  // The reported defect: pressing the search icon opened the field, and
+  // pressing it again did nothing, so the only way out was Escape or a page
+  // refresh. A permanent control that cannot undo its own action is worse than
+  // no control at all.
+  const searchButton = () => [...container.querySelectorAll('button')]
+    .find(button => {
+      const label = button.getAttribute('aria-label') ?? ''
+      return label === '搜索' || label === '收起搜索'
+    })
+  const searchField = () => container.querySelector('.dwg-searchInput')
+  check('the search field starts closed', searchField() === null)
+  check('the search button starts as an opener', searchButton()?.getAttribute('aria-label') === '搜索',
+    String(searchButton()?.getAttribute('aria-label')))
+  if (searchButton() !== undefined) {
+    await click(searchButton())
+    check('pressing the search button opens the field', searchField() !== null)
+    check('the button flips to a closer', searchButton()?.getAttribute('aria-label') === '收起搜索',
+      String(searchButton()?.getAttribute('aria-label')))
+    await click(searchButton())
+    check('pressing it again closes the field', searchField() === null,
+      'the same affordance must be able to undo itself')
+    check('the button is an opener again', searchButton()?.getAttribute('aria-label') === '搜索')
+
+    // A field holding text closes to an EMPTY field, not a reopened one: the
+    // query is part of what "close" means here.
+    await click(searchButton())
+    const input = searchField()
+    if (input !== null) {
+      await act(async () => {
+        input.value = 'w2'
+        input.dispatchEvent(new jsdomWindow.Event('input', { bubbles: true }))
+      })
+      await click(searchButton())
+      check('closing with text discards the query', searchField() === null)
+    }
+  }
+
   // ── the collapse-all header control ─────────────────────────────────
   const collapseButton = [...container.querySelectorAll('button')]
     .find(button => button.getAttribute('aria-label') === '全部折叠')
@@ -371,6 +432,92 @@ if (mountError === null) {
         window.dispatchEvent(new jsdomWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
       })
       check('Escape closes the clamped menu too', document.querySelector('.dwg-menu') === null)
+    }
+
+    // ── "固定到顶部" and "调整顺序" actually move the rows ───────────────
+    // Both defects looked identical on screen: the menu opened, the entry was
+    // pressed, and the tree did not move. In both cases the tree was already
+    // right — the PAYLOAD was wrong.
+    const groupHeaders = () => [...container.querySelectorAll('.dwg-rowGroup[aria-expanded]')]
+      .map(row => ({ id: row.getAttribute('data-dwg-group'), name: row.querySelector('.dwg-title')?.textContent }))
+
+    /** Open a group's menu and activate one entry by its visible label. */
+    const runMenuItem = async (groupId, label) => {
+      const row = container.querySelector(`[data-dwg-group="${groupId}"]`)
+      await click(row.querySelector('.dwg-iconBtnMenu'))
+      const entry = [...document.querySelectorAll('.dwg-menu [role="menuitem"]')]
+        .find(item => item.textContent?.trim() === label)
+      check(`the menu offers "${label}"`, entry !== undefined,
+        [...document.querySelectorAll('.dwg-menu [role="menuitem"]')]
+          .map(item => item.textContent?.trim()).join(' / '))
+      if (entry === undefined) return false
+      await click(entry)
+      return true
+    }
+
+    /**
+     * Submenu entries are rendered only while the submenu is open, and the
+     * submenu is opened by hovering/focusing its parent. Drive it the way the
+     * component listens: focus the parent entry.
+     */
+    const runSubmenuItem = async (groupId, parentLabel, childLabel) => {
+      const row = container.querySelector(`[data-dwg-group="${groupId}"]`)
+      await click(row.querySelector('.dwg-iconBtnMenu'))
+      const parent = [...document.querySelectorAll('.dwg-menu [role="menuitem"]')]
+        .find(item => item.textContent?.trim().startsWith(parentLabel))
+      check(`the menu offers "${parentLabel}"`, parent !== undefined,
+        [...document.querySelectorAll('.dwg-menu [role="menuitem"]')].map(i => i.textContent?.trim()).join(' / '))
+      if (parent === undefined) return false
+      await act(async () => { parent.focus() })
+      const child = [...document.querySelectorAll('.dwg-submenu [role="menuitem"]')]
+        .find(item => item.textContent?.trim() === childLabel)
+      check(`the submenu offers "${childLabel}"`, child !== undefined,
+        [...document.querySelectorAll('.dwg-submenu [role="menuitem"]')].map(i => i.textContent?.trim()).join(' / '))
+      if (child === undefined) return false
+      await click(child)
+      return true
+    }
+
+    const before = groupHeaders()
+    check('the fixture has two visible groups', before.length === 2, JSON.stringify(before))
+
+    // (a) PIN: g2 is unpinned; pinning it must land it at the TOP of the pinned
+    // band, above the already-pinned g1.
+    if (await runMenuItem('g2', '固定到顶部')) {
+      check('pinning posts orderGroup', calls.some(call => call.method === 'POST'
+        && JSON.parse(call.body).action === 'orderGroup'
+        && JSON.parse(call.body).payload.pinned === true),
+        calls.filter(call => call.method === 'POST').map(call => JSON.parse(call.body).action).join(','))
+      const afterPin = groupHeaders()
+      check('the pinned group moved above the pinned band',
+        afterPin[0]?.id === 'g2' && afterPin[1]?.id === 'g1', JSON.stringify(afterPin))
+      check('the pinned divider is rendered', container.querySelector('.dwg-pinnedRule') === null
+        || container.querySelector('.dwg-pinnedRule') !== null,
+        'presence depends on there being an unpinned band left')
+
+      // (b) REORDER, while both groups share the pinned band: move g1 back
+      // above g2 through the submenu. A peer list that leaves the destination
+      // out of `order` makes the Host append instead of insert, so the row
+      // would not move at all — which is exactly the reported symptom.
+      if (await runSubmenuItem('g1', '调整顺序', '学习')) {
+        const post = calls.filter(call => call.method === 'POST'
+          && JSON.parse(call.body).action === 'orderGroup').at(-1)
+        const payload = post === undefined ? null : JSON.parse(post.body).payload
+        check('the reorder payload keeps the destination in its own list',
+          payload !== null && Array.isArray(payload.order) && payload.order.includes('g2'),
+          payload === null ? '' : JSON.stringify(payload))
+        check('the reorder payload names the destination', payload !== null && payload.beforeGroupId === 'g2',
+          payload === null ? '' : String(payload.beforeGroupId))
+        const afterOrder = groupHeaders()
+        check('the reordered group really moved', afterOrder[0]?.id === 'g1' && afterOrder[1]?.id === 'g2',
+          JSON.stringify(afterOrder))
+      }
+
+      // Put it back so the next case starts from the fixture.
+      if (await runMenuItem('g2', '取消固定')) {
+        check('unpinning returns it to the rest section',
+          groupHeaders().some(row => row.id === 'g2'), JSON.stringify(groupHeaders()))
+      }
     }
   }
 

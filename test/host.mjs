@@ -202,6 +202,31 @@ check('orderGroup renumbers the target section', next.payload.groups.find(group 
 check('orderGroup does not disturb the other section', next.payload.groups.find(group => group.id === gid).pinned === true,
   'a pinned group and an unpinned one number their own sections')
 
+// The insertion rule the client depends on: the moved group lands at the index
+// its `beforeGroupId` occupies IN THE SENT LIST. A client that filters the
+// destination out of `order` therefore appends instead of inserting, which on a
+// two-row tree is indistinguishable from "the menu did nothing".
+const a = (await primary.call(mod.MUTATE_PATH, { action: 'createGroup', payload: { name: 'A' } })).payload.groups.at(-1).id
+const b = (await primary.call(mod.MUTATE_PATH, { action: 'createGroup', payload: { name: 'B' } })).payload.groups.at(-1).id
+next = await primary.call(mod.MUTATE_PATH, {
+  action: 'orderGroup', payload: { groupId: b, pinned: false, order: [a, gid2], beforeGroupId: '' },
+})
+check('a reorder with an empty destination appends', next.payload.groups.find(group => group.id === b).order
+  > next.payload.groups.find(group => group.id === a).order,
+  next.payload.groups.map(group => `${group.id}#${group.order}`).join(' '))
+next = await primary.call(mod.MUTATE_PATH, {
+  action: 'orderGroup', payload: { groupId: b, pinned: false, order: [a, gid2], beforeGroupId: a },
+})
+check('a reorder before a listed destination really inserts it first',
+  next.payload.groups.find(group => group.id === b).order < next.payload.groups.find(group => group.id === a).order,
+  next.payload.groups.map(group => `${group.id}#${group.order}`).join(' '))
+next = await primary.call(mod.MUTATE_PATH, {
+  action: 'orderGroup', payload: { groupId: b, pinned: false, order: [gid2], beforeGroupId: a },
+})
+check('an unlisted destination degrades to an append, not an insertion',
+  next.payload.groups.find(group => group.id === b).order > next.payload.groups.find(group => group.id === gid2).order,
+  'this is the shape the client used to send; the Host is behaving as specified')
+
 // ═══════════════════════════════════════════════════════════════════════
 // Whole-tree operations
 // ═══════════════════════════════════════════════════════════════════════

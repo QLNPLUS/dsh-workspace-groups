@@ -129,6 +129,7 @@ window.__ModuleLoader__.load({
       search: '搜索',
       'search.placeholder': '搜索组、项目或对话…',
       'search.clear': '清空搜索',
+      'search.close': '收起搜索',
       'search.none': '没有匹配的组、项目或对话',
       'search.more': '仅显示前 {n} 条，请缩小范围',
       'search.path': '所属：{path}',
@@ -230,6 +231,7 @@ window.__ModuleLoader__.load({
       search: 'Search',
       'search.placeholder': 'Search groups, projects, conversations…',
       'search.clear': 'Clear search',
+      'search.close': 'Close search',
       'search.none': 'No matching group, project, or conversation',
       'search.more': 'Showing the first {n}; narrow the query',
       'search.path': 'In {path}',
@@ -847,6 +849,8 @@ window.__ModuleLoader__.load({
     const VIEW_GRID = ['M2.4 3.6h4.4v3.2H2.4M9.2 3.6h4.4v3.2H9.2M2.4 9.2h4.4v3.2H2.4M9.2 9.2h4.4v3.2H9.2']
     const VIEW_LIST = ['M2.8 4.4h10.4M2.8 8h10.4M2.8 11.6h6.4']
     const CLOSE = ['M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2']
+    /** A pin, so the unpin entry reads as a state change rather than a mystery. */
+    const PIN = ['M8.9 13.4l-3.3.6.6-3.3V3.9a1.6 1.6 0 0 1 1.6-1.6h5.6a1.6 1.6 0 0 1 1.6 1.6v6.8z']
     const COLLAPSE = ['M2.6 4.2h10.8M2.6 8h10.8M2.6 11.8h10.8M5 4.2l3 3.8-3 3.8']
 
     /**
@@ -1174,6 +1178,12 @@ window.__ModuleLoader__.load({
           onMouseEnter: () => { if (children) onHover(item) },
           onFocus: () => { if (children) onHover(item) },
         },
+        item.glyph === undefined ? null : h('svg', {
+          viewBox: '0 0 16 16', width: 12, height: 12, 'aria-hidden': 'true', focusable: 'false',
+          className: 'dwg-menuGlyph',
+        }, [].concat(item.glyph).map((d, index) => (typeof d === 'string'
+          ? h('path', { key: index, d, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' })
+          : h('circle', { key: index, cx: d[0], cy: d[1], r: d[2], fill: 'currentColor' })))),
         h('span', { className: 'dwg-menuLabel' }, item.label),
         item.checked === true ? h('span', { className: 'dwg-menuMark', 'aria-hidden': 'true' }, '✓') : null,
         children ? h('span', { className: 'dwg-menuArrow', 'aria-hidden': 'true' }, '›') : null,
@@ -1798,13 +1808,20 @@ window.__ModuleLoader__.load({
           {
             id: 'pin',
             label: group.pinned ? t('menu.unpin') : t('menu.pin'),
+            // The trailing pin glyph marks the ENTRIES that move a group into the
+            // pinned band. Without it "取消固定" reads like a status label rather
+            // than an action, and the group appears to stay put.
+            glyph: PIN,
             run: () => {
+              // Unpin: land at the head of the rest section (`peers[0]` is its
+              // first row). Pin: land at the head of the pinned band, which is
+              // exactly what "固定到顶部" promises.
               if (group.pinned) {
                 const peers = model.groups.map(section => section.id).filter(id => id !== group.id)
-                void reorderGroup(group.id, false, peers, peers[0])
+                void reorderGroup(group.id, false, peers, peers[0] ?? '')
               } else {
-                const peers = model.pinned.map(section => section.id)
-                void reorderGroup(group.id, true, peers, peers[0])
+                const peers = model.pinned.map(section => section.id).filter(id => id !== group.id)
+                void reorderGroup(group.id, true, peers, peers[0] ?? '')
               }
             },
           },
@@ -1817,8 +1834,14 @@ window.__ModuleLoader__.load({
                 id: `move-${section.id}`,
                 label: section.name,
                 run: () => {
+                  // The Host inserts the moved group at the index its
+                  // `beforeGroupId` occupies in the sent list, so the
+                  // destination has to be IN that list. Filtering it out — as
+                  // this used to — left the id unfindable, the Host appended
+                  // instead, and every "move above X" quietly became "move to
+                  // the end": a menu that looked like it did nothing.
                   const peers = (group.pinned ? model.pinned : model.groups)
-                    .filter(entry => entry.id !== group.id && entry.id !== section.id)
+                    .filter(entry => entry.id !== group.id)
                     .map(entry => entry.id)
                   void reorderGroup(group.id, group.pinned, peers, section.id)
                 },
@@ -2063,7 +2086,17 @@ window.__ModuleLoader__.load({
           )
         }
         if (loading) return h('div', { className: 'dwg-hint dwg-loading' }, '…')
-        return sections
+        /**
+         * A rule between the pinned section and the rest. Pinned groups sit in
+         * their own band above this line, which is the only affordance that
+         * says "unpin moves you down there" — without it the two bands look
+         * like one list that reordered itself for no reason.
+         */
+        return model.pinned.length > 0 && (model.groups.length > 0 || model.ungrouped.projects.length > 0)
+          ? [...sections.slice(0, model.pinned.length),
+            h('div', { key: 'dwg-pinnedRule', className: 'dwg-pinnedRule', 'aria-hidden': 'true' }),
+            ...sections.slice(model.pinned.length)]
+          : sections
       }
 
       return h(
@@ -2077,10 +2110,17 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'dwg-headerActions' },
             h(IconButton, {
-              label: t('search'),
+              label: searchOpen || query.length > 0 ? t('search.close') : t('search'),
               glyph: SEARCH,
-              className: cx('dwg-iconBtnHeader', searchOpen && 'dwg-iconBtnOn'),
+              className: cx('dwg-iconBtnHeader', (searchOpen || query.length > 0) && 'dwg-iconBtnOn'),
+              // The same button opens AND closes the field: one permanent
+              // affordance that does not move, rather than an open control plus
+              // a separate dismiss control hidden somewhere else.
               onClick: () => {
+                if (searchOpen || query.length > 0) {
+                  clearSearch()
+                  return
+                }
                 expandSidebar()
                 setSearchOpen(true)
                 window.setTimeout(() => searchRef.current?.focus?.({ preventScroll: true }), 0)
@@ -2224,6 +2264,7 @@ window.__ModuleLoader__.load({
 .dwg-dot-ongoing{background:var(--dsw-alias-state-business-primary)}
 .dwg-leading{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;min-width:0}
 .dwg-pinMark{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--dsw-alias-label-secondary)}
+.dwg-pinnedRule{height:1px;margin:4px 8px;background:var(--dsw-alias-border-l2)}
 .dwg-rowActions{display:none;align-items:center;gap:2px;flex:0 0 auto}
 .dwg-iconBtn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;padding:0}
 .dwg-iconBtn:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
@@ -2252,6 +2293,7 @@ window.__ModuleLoader__.load({
 .dwg-menuItemDanger{color:var(--dsw-alias-state-error-primary)}
 .dwg-menuLabel{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dwg-menuMark,.dwg-menuArrow{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}
+.dwg-menuGlyph{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}
 .dwg-menuSep{height:1px;margin:3px 2px;background:var(--dsw-alias-border-l2)}
 .dwg-scrim{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgb(0 0 0 / 32%);z-index:1100}
 .dwg-dialog{box-sizing:border-box;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px));padding:16px;border-radius:14px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);box-shadow:0 16px 48px rgb(0 0 0 / 24%)}
