@@ -434,10 +434,11 @@ if (mountError === null) {
       check('Escape closes the clamped menu too', document.querySelector('.dwg-menu') === null)
     }
 
-    // ── "固定到顶部" and "调整顺序" actually move the rows ───────────────
-    // Both defects looked identical on screen: the menu opened, the entry was
-    // pressed, and the tree did not move. In both cases the tree was already
-    // right — the PAYLOAD was wrong.
+    // ── pinning really moves the row ─────────────────────────────────────
+    // A pin that posts the right action but leaves the row where it was is
+    // indistinguishable from a dead menu, so this asserts the ROW POSITION, not
+    // the request. Reordering has no menu entry on purpose: the drop path owns
+    // it (see §5 "拖动"), and its payload shape is covered by test/host.mjs.
     const groupHeaders = () => [...container.querySelectorAll('.dwg-rowGroup[aria-expanded]')]
       .map(row => ({ id: row.getAttribute('data-dwg-group'), name: row.querySelector('.dwg-title')?.textContent }))
 
@@ -455,33 +456,27 @@ if (mountError === null) {
       return true
     }
 
-    /**
-     * Submenu entries are rendered only while the submenu is open, and the
-     * submenu is opened by hovering/focusing its parent. Drive it the way the
-     * component listens: focus the parent entry.
-     */
-    const runSubmenuItem = async (groupId, parentLabel, childLabel) => {
+    const groupMenuLabels = async (groupId) => {
       const row = container.querySelector(`[data-dwg-group="${groupId}"]`)
       await click(row.querySelector('.dwg-iconBtnMenu'))
-      const parent = [...document.querySelectorAll('.dwg-menu [role="menuitem"]')]
-        .find(item => item.textContent?.trim().startsWith(parentLabel))
-      check(`the menu offers "${parentLabel}"`, parent !== undefined,
-        [...document.querySelectorAll('.dwg-menu [role="menuitem"]')].map(i => i.textContent?.trim()).join(' / '))
-      if (parent === undefined) return false
-      await act(async () => { parent.focus() })
-      const child = [...document.querySelectorAll('.dwg-submenu [role="menuitem"]')]
-        .find(item => item.textContent?.trim() === childLabel)
-      check(`the submenu offers "${childLabel}"`, child !== undefined,
-        [...document.querySelectorAll('.dwg-submenu [role="menuitem"]')].map(i => i.textContent?.trim()).join(' / '))
-      if (child === undefined) return false
-      await click(child)
-      return true
+      const labels = [...document.querySelectorAll('.dwg-menu [role="menuitem"]')]
+        .map(item => item.textContent?.trim())
+      await act(async () => {
+        window.dispatchEvent(new jsdomWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      })
+      return labels
     }
 
     const before = groupHeaders()
     check('the fixture has two visible groups', before.length === 2, JSON.stringify(before))
 
-    // (a) PIN: g2 is unpinned; pinning it must land it at the TOP of the pinned
+    // The menu must NOT carry its own reorder list: dragging a group header
+    // onto another header is the single implementation of that gesture.
+    const menuLabels = await groupMenuLabels('g2')
+    check('the group menu has no reorder submenu', !menuLabels.some(label => label?.startsWith('调整顺序')),
+      menuLabels.join(' / '))
+
+    // (a) PIN: g2 is unpinned; pinning it lands it at the TOP of the pinned
     // band, above the already-pinned g1.
     if (await runMenuItem('g2', '固定到顶部')) {
       check('pinning posts orderGroup', calls.some(call => call.method === 'POST'
@@ -491,27 +486,12 @@ if (mountError === null) {
       const afterPin = groupHeaders()
       check('the pinned group moved above the pinned band',
         afterPin[0]?.id === 'g2' && afterPin[1]?.id === 'g1', JSON.stringify(afterPin))
-      check('the pinned divider is rendered', container.querySelector('.dwg-pinnedRule') === null
-        || container.querySelector('.dwg-pinnedRule') !== null,
-        'presence depends on there being an unpinned band left')
-
-      // (b) REORDER, while both groups share the pinned band: move g1 back
-      // above g2 through the submenu. A peer list that leaves the destination
-      // out of `order` makes the Host append instead of insert, so the row
-      // would not move at all — which is exactly the reported symptom.
-      if (await runSubmenuItem('g1', '调整顺序', '学习')) {
-        const post = calls.filter(call => call.method === 'POST'
-          && JSON.parse(call.body).action === 'orderGroup').at(-1)
-        const payload = post === undefined ? null : JSON.parse(post.body).payload
-        check('the reorder payload keeps the destination in its own list',
-          payload !== null && Array.isArray(payload.order) && payload.order.includes('g2'),
-          payload === null ? '' : JSON.stringify(payload))
-        check('the reorder payload names the destination', payload !== null && payload.beforeGroupId === 'g2',
-          payload === null ? '' : String(payload.beforeGroupId))
-        const afterOrder = groupHeaders()
-        check('the reordered group really moved', afterOrder[0]?.id === 'g1' && afterOrder[1]?.id === 'g2',
-          JSON.stringify(afterOrder))
-      }
+      check('the pinned divider separates the two bands',
+        container.querySelector('.dwg-pinnedRule') !== null)
+      // A pinned row must be visually distinguishable without an icon; the
+      // accent bar and the band divider carry that, so nothing else is drawn.
+      check('no pin glyph is drawn inside the menu',
+        container.querySelector('.dwg-menuGlyph') === null)
 
       // Put it back so the next case starts from the fixture.
       if (await runMenuItem('g2', '取消固定')) {

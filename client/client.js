@@ -161,7 +161,6 @@ window.__ModuleLoader__.load({
       'menu.moveTo': '移动到组',
       'menu.moveOut': '移出分组',
       'menu.deleteProject': '删除项目…',
-      'menu.order': '调整顺序',
       'dlg.ok': '确定',
       'dlg.cancel': '取消',
       'dlg.delete': '删除',
@@ -263,7 +262,6 @@ window.__ModuleLoader__.load({
       'menu.moveTo': 'Move to group',
       'menu.moveOut': 'Remove from group',
       'menu.deleteProject': 'Delete project…',
-      'menu.order': 'Reorder',
       'dlg.ok': 'OK',
       'dlg.cancel': 'Cancel',
       'dlg.delete': 'Delete',
@@ -849,8 +847,6 @@ window.__ModuleLoader__.load({
     const VIEW_GRID = ['M2.4 3.6h4.4v3.2H2.4M9.2 3.6h4.4v3.2H9.2M2.4 9.2h4.4v3.2H2.4M9.2 9.2h4.4v3.2H9.2']
     const VIEW_LIST = ['M2.8 4.4h10.4M2.8 8h10.4M2.8 11.6h6.4']
     const CLOSE = ['M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2']
-    /** A pin, so the unpin entry reads as a state change rather than a mystery. */
-    const PIN = ['M8.9 13.4l-3.3.6.6-3.3V3.9a1.6 1.6 0 0 1 1.6-1.6h5.6a1.6 1.6 0 0 1 1.6 1.6v6.8z']
     const COLLAPSE = ['M2.6 4.2h10.8M2.6 8h10.8M2.6 11.8h10.8M5 4.2l3 3.8-3 3.8']
 
     /**
@@ -1178,12 +1174,6 @@ window.__ModuleLoader__.load({
           onMouseEnter: () => { if (children) onHover(item) },
           onFocus: () => { if (children) onHover(item) },
         },
-        item.glyph === undefined ? null : h('svg', {
-          viewBox: '0 0 16 16', width: 12, height: 12, 'aria-hidden': 'true', focusable: 'false',
-          className: 'dwg-menuGlyph',
-        }, [].concat(item.glyph).map((d, index) => (typeof d === 'string'
-          ? h('path', { key: index, d, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' })
-          : h('circle', { key: index, cx: d[0], cy: d[1], r: d[2], fill: 'currentColor' })))),
         h('span', { className: 'dwg-menuLabel' }, item.label),
         item.checked === true ? h('span', { className: 'dwg-menuMark', 'aria-hidden': 'true' }, '✓') : null,
         children ? h('span', { className: 'dwg-menuArrow', 'aria-hidden': 'true' }, '›') : null,
@@ -1808,10 +1798,6 @@ window.__ModuleLoader__.load({
           {
             id: 'pin',
             label: group.pinned ? t('menu.unpin') : t('menu.pin'),
-            // The trailing pin glyph marks the ENTRIES that move a group into the
-            // pinned band. Without it "取消固定" reads like a status label rather
-            // than an action, and the group appears to stay put.
-            glyph: PIN,
             run: () => {
               // Unpin: land at the head of the rest section (`peers[0]` is its
               // first row). Pin: land at the head of the pinned band, which is
@@ -1825,28 +1811,10 @@ window.__ModuleLoader__.load({
               }
             },
           },
-          {
-            id: 'order',
-            label: t('menu.order'),
-            children: (group.pinned ? model.pinned : model.groups)
-              .filter(section => section.id !== group.id)
-              .map(section => ({
-                id: `move-${section.id}`,
-                label: section.name,
-                run: () => {
-                  // The Host inserts the moved group at the index its
-                  // `beforeGroupId` occupies in the sent list, so the
-                  // destination has to be IN that list. Filtering it out — as
-                  // this used to — left the id unfindable, the Host appended
-                  // instead, and every "move above X" quietly became "move to
-                  // the end": a menu that looked like it did nothing.
-                  const peers = (group.pinned ? model.pinned : model.groups)
-                    .filter(entry => entry.id !== group.id)
-                    .map(entry => entry.id)
-                  void reorderGroup(group.id, group.pinned, peers, section.id)
-                },
-              })),
-          },
+          // No "调整顺序" submenu on purpose: dragging a group header onto another
+          // header already reorders it within its section, and a menu that repeats
+          // a gesture the tree teaches is one more list to keep correct. The drop
+          // path is the single implementation; see §5 "拖动".
           { id: 'sep2', separatorBefore: true, label: '' },
           { id: 'archive', label: t('menu.archive'), run: () => { void commit('archiveGroup', { groupId: group.id }) } },
           { id: 'delete', label: t('menu.deleteGroup'), danger: true, run: () => openDialog({ kind: 'deleteGroup', groupId: group.id, name: group.name }) },
@@ -2293,7 +2261,6 @@ window.__ModuleLoader__.load({
 .dwg-menuItemDanger{color:var(--dsw-alias-state-error-primary)}
 .dwg-menuLabel{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dwg-menuMark,.dwg-menuArrow{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}
-.dwg-menuGlyph{flex:0 0 auto;color:var(--dsw-alias-label-tertiary)}
 .dwg-menuSep{height:1px;margin:3px 2px;background:var(--dsw-alias-border-l2)}
 .dwg-scrim{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgb(0 0 0 / 32%);z-index:1100}
 .dwg-dialog{box-sizing:border-box;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px));padding:16px;border-radius:14px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);box-shadow:0 16px 48px rgb(0 0 0 / 24%)}
