@@ -1,0 +1,51 @@
+{
+  "name": "dsh-workspace-groups",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Group the DSH sidebar workspaces into named, colored, collapsible folders: drag projects between groups, pin and archive groups, search across group/project/conversation names, and keep every fold state across restarts.",
+  "main": "./plugin/index.mjs",
+  "exports": {
+    ".": "./plugin/index.mjs",
+    "./client": "./client/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "plugin",
+    "client",
+    "locale",
+    "docs",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "workspace",
+    "sidebar",
+    "groups"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node test/host.mjs && node test/smoke.mjs && node test/render.mjs && node test/mount.mjs"
+  }
+}

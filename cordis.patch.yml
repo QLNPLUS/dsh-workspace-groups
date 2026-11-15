@@ -1,0 +1,26 @@
+# dsh-workspace-groups bundle layer: register this plugin's Loader row.
+#
+# The row id `workspace-groups` is the Loader entry id; the browser half takes
+# its own store key from the same package. Renaming one without the other
+# leaves the Plugins page with a form for a row that does not exist.
+#
+# Every value under `config:` is user-owned; the block only declares behaviour
+# defaults so the Plugins page has a schema to render.
+- insert:
+    - id: workspace-groups
+      name: dsh-workspace-groups
+      config:
+        # Show the grouped tree in the sidebar browsing region. Turning this
+        # off leaves the shipped workspace browser untouched.
+        enabled: true
+        # Conversations shown under a collapsed project before "Show all".
+        # 1 or 2 keeps the sidebar short; larger values reveal more up front.
+        previewSessions: 2
+        # Seconds of quiet before a fold-state change is written to disk.
+        persistDebounceMs: 400
+        # Maximum rows a search query returns before asking for a narrower query.
+        searchLimit: 80
+        # Pre-create these groups on first run (id, name, color, icon). An
+        # operator can rename, recolor or delete them afterwards; the ids stay
+        # stable so an empty list here simply seeds nothing.
+        seedGroups: []

@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Workspace groups",
+    "description": "Collect the sidebar's workspaces into named, colored group folders: drag projects between groups, pin and archive groups, search across group, project and conversation names, collapse everything with one shortcut, and keep every fold state after a restart.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,0 +1,8 @@
+# Dependencies installed only to run the render/mount test suites.
+node_modules/
+
+# Test and editor litter.
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
