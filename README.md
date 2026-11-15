@@ -139,7 +139,7 @@ workspace-groups/
 | `test/host.mjs` | 无 | 两条路由、12 个动作、持久化、坏文件自愈、请求校验 |
 | `test/smoke.mjs` | 无 | 工厂形状、注册形状（一个 entry、`priority: -1`、不声明子槽、**`inject()` 只出一个 `injected` prop**）、CSS（含 token 语义：不用单色墨色当强调色）、首屏树、接线错误面 |
 | `test/render.mjs` | react + react-dom | 真实 React 渲染：hook 合法、props 合法、两个变体都出 HTML |
-| `test/mount.mjs` | react + react-dom + jsdom | 真实挂载：effect 真的跑、点击真的发请求、**组头点击真的折叠/展开**、**菜单真的开在按钮上并被夹进视口**、菜单真的 portal 到 body、对话框真的提交 |
+| `test/mount.mjs` | react + react-dom + jsdom | 真实挂载：effect 真的跑、点击真的发请求、**组头点击真的折叠/展开**、**菜单真的开在按钮上并被夹进视口**、菜单真的 portal 到 body、**图标/色板选择器里的选择真的写进请求**、**编辑保存时三个字段一起发** |
 
 `render` / `mount` 需要 React 和 jsdom，因为它们要证明**真实渲染器**接受这棵树。它们不会因为缺依赖就报「测试失败」，而是打印 `SKIP` 并退出 0（「工具没装」不等于「插件坏了」）。启用方法：
 
@@ -150,6 +150,17 @@ cd workspace-groups && pnpm add -D react@18 react-dom@18 jsdom
 # 或者指向任何一份已有的
 WG_REACT_ROOT=/path/to/dir node test/render.mjs
 ```
+
+### 看得到的那一层：`test/preview.mjs`
+
+四个测试能证明结构对、交互通、不抛异常，**不能证明好看**。所以另有一个不是测试的工具：它把真实 bundle 挂进 jsdom、打开「编辑分组」对话框，输出一个自带真实主题 token 和插件真实样式的独立 HTML：
+
+```bash
+node test/preview.mjs          # → docs/preview-dialog.html（浅色）
+node test/preview.mjs --dark   # → docs/preview-dialog-dark.html（深色）
+```
+
+`docs/preview-dialog.png` / `docs/preview-dialog-dark.png` 就是对这两个文件用无头浏览器截图的结果——看一眼就知道间距、色块、选中环是不是想要的样子，而不必先装进宿主来回试。
 
 两个「零依赖」的测试随时可跑，也是日常回归的主力：
 
