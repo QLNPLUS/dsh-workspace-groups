@@ -197,6 +197,18 @@ reconcileOrder(members, stored)  // stored ∩ live，按 stored 相对顺序；
 
 `test/mount.mjs` 断言的是**行真的换了位置**，而不只是断言发了请求：一个发了对的动作但行没动的按钮，和死按钮在用户眼里是同一件事。
 
+#### 一条缝只能有一条线
+
+加完分隔线之后出现了第二种毛病：**「分组」和「未分组」之间出现两条线**。原因是那条缝被两边各画了一次——pinned 区段自己插入 `.dwg-pinnedRule`，「未分组」又无条件带一个 `border-top`。所有组都置顶时，两个区段之间只剩「未分组」，两条线就并排落在了几个像素之内。
+
+现在每条缝只有一个主人：
+
+- pinned 区段画它自己下面那条线，因为只有它会移动；
+- 「未分组」只在**上面确实有一个分组**时才带上 `.dwg-groupLooseSep`（由 `separated` prop 决定，不是无条件 class）。它永远是最后一段，所以它不会和别的区段抢同一条缝。
+- 全部组都被置顶时，Ungrouped 上面是 pinned 区段，`separated` 为 false —— 只有 `pinnedRule` 一条线。
+
+`test/mount.mjs` 断言 `pinnedRule + groupLooseSep` 在置顶状态下恰好等于 1。
+
 ### 排序交给拖拽，不再重复实现
 
 曾经还有右键菜单「调整顺序 →」的子菜单，用来把组放到指定组的相邻位置。它和拖拽做的是同一件事，而且它的 payload（完整顺序 + `beforeGroupId`）比拖拽更容易写错——有一版在发送前把目的地也从 `order` 里剔掉了，Host 找不到下标就只会追加，于是「移到 X 上面」悄悄变成了「移到末尾」。这个子菜单已经拆掉，`orderGroup` / `orderWorkspace` 的调用点只剩拖拽一处。`test/host.mjs` 保留三种插入情形（空目的地追加 / 已列出目的地插入 / 未列出目的地退化为追加）的断言，因为那正是拖拽也会走的那条规则。
@@ -262,6 +274,37 @@ body[data-ds-dark-theme] .dwg-accent-blue{--dwg-accent:#7AAAFF}
 几何对齐侧栏自身：32px 行高、8px 行内边距、12px 圆角、14/20px 标题、10/16px 元信息。树的滚动容器同时喂给侧栏的滚轮交接（`bindScrollerRef`），这样触控板和滚轮在两个滚动区之间过渡正常。
 
 token 分两类，别混用：`--dsw-alias-state-business-primary` 是**交互蓝**（强调色、焦点、运行中状态点），`--dsw-alias-brand-primary` 是**单色品牌墨色**（浅色主题近黑、深色主题近白）。把后者当强调色用，浅色主题下就是一堆黑框。主按钮不自己配色，而是借原生那对 `--dsw-alias-button-primary-fill` + `--dsw-alias-label-primary-foreground`（两者会随主题一起翻转），危险变体只覆写 fill（和原生的 `dangerButton` 一样）。
+
+#### hover 必须换 fill，不是换背景
+
+主按钮的 hover 曾经这样写：
+
+```css
+.dwg-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+```
+
+这条对描边按钮是对的（描边按钮本来就没有填充），对**填充按钮**是灾难：`interactive-bg-hover` 是半透明的行悬停色，盖上去等于把近黑/近白的实心填充**擦掉**，只剩一圈边框和里面的文字——截图里那对「取消 / 保存」看着像两个空按钮就是这个原因。
+
+现在主按钮和危险按钮各自覆盖自己的 hover，走的是同一套配色对：
+
+```css
+.dwg-btnPrimary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);...}
+.dwg-btnDanger:hover:not(:disabled){--dsw-alias-button-primary-hover:color-mix(in srgb,var(--dsw-alias-state-error-primary) 86%,var(--dsw-alias-label-on-color));...}
+```
+
+`--dsw-alias-button-primary-hover` 是原生主按钮自己的悬停档（浅色 `rgb(67,69,74)`、深色 `rgb(235,238,242)`，正好是 fill 的相邻一档），所以实心按钮 hover 之后仍然是实心的。危险色在深色主题下 `state-error-primary` 和 `state-error-secondary` 都是 red-400，没有现成的 hover 档，所以就地混一点 `label-on-color`（两个主题都是白色），一条规则给出两档。
+
+#### 选择器权重：变量体必须写全
+
+`.dwg-iconBtn` 的 20px 基础规则在这张表里**位置靠后**，所以 `.dwg-iconBtnHeader{width:24px}` 这种同级选择器会被它盖掉，头部按钮实际渲染成 20px（截图上四个按钮挤在一起就是这个原因）。现在所有改尺寸的变体都写 `.dwg-iconBtn.dwg-iconBtnHeader{...}` 双类，权重压过基础规则。`test/smoke.mjs` 对四个变体（header / rail / viewBtn / searchClear）逐个断言这一点。
+
+### 图标：一套 24 格，不要两套栅格
+
+组图标最初是手画的 16 格路径（`viewBox="0 0 16 16"`、`stroke-width:1.6`）。换成 Tabler 之后出现了一个只在截图里才看得见的问题：Tabler 的路径是**24 格 / 2px 描边**，如果直接塞进 16 的 viewBox，每条描边都会按 16/24 缩放，2px 变成名义上的 2.67px —— 所有图标都比周围粗半档。
+
+现在全区域只有一套栅格：一个 `Glyph` 组件统一定义 `viewBox="0 0 24 24"` + `stroke-width:2`，调用方只给路径和像素尺寸（`size`）。组图标 14px、头部控件 16px、树里的 chevron 12px，缩放交给 SVG 自己做。`test/render.mjs` 断言渲染出来的树里**没有** `viewBox="0 0 16 16"`，防止手画图标混回来。
+
+头部四个控件（搜索 / 新建项目 / 新建分组 / 全部折叠）都用 Tabler：`search`、`folder-plus`、`plus`、`chevrons-up`。最后一个是挑出来的——Tabler 没有字面的「折叠树」图标，`fold` / `fold-up` / `arrows-minimize` 在 14px 下那些小横点会糊成一团，`chevrons-up` 是这个尺寸下唯一还读得出形状的，而且「全部往上收」正好是它干的事。
 
 ### rail（折叠态）
 

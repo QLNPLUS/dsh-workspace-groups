@@ -232,6 +232,14 @@ if (wideError === null) {
     && wideHtml.includes('aria-expanded="true"'))
   check('the region is labelled for screen readers', wideHtml.includes('aria-label="工作区分组树"'))
   check('rows carry their searchable identity', wideHtml.includes('data-dwg-session="s2"'))
+  /**
+   * Every icon in the region is a Tabler 24-grid outline. A 16-grid path drawn
+   * into a 24 viewBox renders as a speck in a corner; a 24-grid path drawn into
+   * a 16 viewBox renders half again too heavy. So the grid itself is pinned.
+   */
+  check('every icon in the tree uses the 24 grid',
+    !wideHtml.includes('viewBox="0 0 16 16"'), 'a hand-drawn 16-grid icon survived the migration')
+  check('the group glyphs keep their accent hook', wideHtml.includes('dwg-glyphAccent'))
 }
 
 if (railError === null) {

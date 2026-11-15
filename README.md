@@ -153,14 +153,20 @@ WG_REACT_ROOT=/path/to/dir node test/render.mjs
 
 ### 看得到的那一层：`test/preview.mjs`
 
-四个测试能证明结构对、交互通、不抛异常，**不能证明好看**。所以另有一个不是测试的工具：它把真实 bundle 挂进 jsdom、打开「编辑分组」对话框，输出一个自带真实主题 token 和插件真实样式的独立 HTML：
+四个测试能证明结构对、交互通、不抛异常，**不能证明好看**。所以另有一个不是测试的工具：它把真实 bundle 挂进 jsdom，输出几个自带真实主题 token 和插件真实样式的独立 HTML：
 
 ```bash
-node test/preview.mjs          # → docs/preview-dialog.html（浅色）
-node test/preview.mjs --dark   # → docs/preview-dialog-dark.html（深色）
+node test/preview.mjs                 # → docs/preview-tree.html + preview-dialog.html + preview-buttons.html
+node test/preview.mjs --dark          # 深色版本
+node test/preview.mjs --all-groups    # 全部取消置顶（检查「分组 / 未分组」那条缝）
+node test/preview.mjs --all-pinned    # 全部置顶（检查另一侧的缝）
 ```
 
-`docs/preview-dialog.png` / `docs/preview-dialog-dark.png` 就是对这两个文件用无头浏览器截图的结果——看一眼就知道间距、色块、选中环是不是想要的样子，而不必先装进宿主来回试。
+- `preview-tree.html`：整棵树的真实渲染
+- `preview-dialog.html`：打开「编辑分组」对话框的样子
+- `preview-buttons.html`：按钮默认态与 **hover 态**。静态页面没法真 hover，所以这个页面把插件样式表里**真实的** hover 声明原样抓出来、只改选择器套到 `[data-hover]` 上——看到的是真的声明，不是重画的颜色。
+
+`docs/*.png` 就是对这些 HTML 用无头浏览器截图的结果。看一眼就知道间距、色块、选中环、按钮 hover 是不是想要的样子，而不必先装进宿主来回试。
 
 两个「零依赖」的测试随时可跑，也是日常回归的主力：
 

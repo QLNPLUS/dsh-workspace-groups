@@ -1,6 +1,10 @@
 # Dependencies installed only to run the render/mount test suites.
 node_modules/
 
+# `test/preview.mjs` output. The PNGs are committed (they are what the README
+# points at); the HTML they were shot from is regenerated on demand.
+docs/preview-*.html
+
 # Test and editor litter.
 *.log
 *.tmp

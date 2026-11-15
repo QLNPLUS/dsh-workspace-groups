@@ -841,32 +841,50 @@ window.__ModuleLoader__.load({
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * One group glyph. The path table is Tabler's 24×24 outline set, so the
-     * viewBox is 24 and the stroke width is Tabler's own 2 — scaling a 24-grid
-     * icon into a 16 viewBox would fatten every stroke by half again.
+     * One icon, drawn from a Tabler outline path list.
+     *
+     * Tabler's grid is 24×24 with a 2px stroke. Every icon in this file uses
+     * that grid rather than a hand-drawn 16 one, so the whole region speaks one
+     * visual language: mixing a 16-grid icon drawn at 1.7 with a 24-grid icon
+     * scaled into a 16 viewBox makes the second one look half again as heavy
+     * (a 2px stroke on a 24 grid rendered into 16 keeps 2/24 of the width, so
+     * the ink lands at 2.67px nominal — visibly blunt).
+     */
+    const Glyph = ({ paths, size = 14, className }) => h(
+      'svg',
+      {
+        className: cx('dwg-glyphIc', className),
+        viewBox: '0 0 24 24',
+        width: size,
+        height: size,
+        'aria-hidden': 'true',
+        focusable: 'false',
+      },
+      paths.map((d, index) => h('path', {
+        key: index, d, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
+      })),
+    )
+
+    /**
+     * One group glyph. `dot` has no paths on purpose: it is the neutral marker
+     * the Ungrouped bucket uses, drawn as a filled circle by the stylesheet.
      */
     const GroupGlyph = ({ icon, className }) => {
       const paths = ICON_PATHS[icon] ?? ICON_PATHS.folder
       if (paths.length === 0) return h('span', { className: cx('dwg-glyph', 'dwg-glyphDot', className), 'aria-hidden': 'true' })
-      return h(
-        'svg',
-        { className: cx('dwg-glyph', className), viewBox: '0 0 24 24', width: 14, height: 14, 'aria-hidden': 'true', focusable: 'false' },
-        paths.map((d, index) => h('path', {
-          key: index, d, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
-        })),
-      )
+      return h(Glyph, { paths, size: 14, className: cx('dwg-glyph', className) })
     }
 
-    const Chevron = ({ open }) => h(
-      'svg',
-      { className: cx('dwg-chevron', open && 'dwg-chevronOpen'), viewBox: '0 0 16 16', width: 12, height: 12, 'aria-hidden': 'true', focusable: 'false' },
-      h('path', { d: 'M5.6 3.4L10 8l-4.4 4.6', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' }),
-    )
+    const Chevron = ({ open }) => h(Glyph, {
+      paths: CHEVRON_RIGHT,
+      size: 12,
+      className: cx('dwg-chevron', open && 'dwg-chevronOpen'),
+    })
 
     const StateDot = ({ state }) => h('span', { className: cx('dwg-dot', `dwg-dot-${state}`), 'aria-hidden': 'true' })
 
     /** Small square icon button used by the header and rows. */
-    const IconButton = ({ label, glyph, onClick, className }) => h(
+    const IconButton = ({ label, glyph, size = 14, onClick, className }) => h(
       'button',
       {
         type: 'button',
@@ -876,21 +894,32 @@ window.__ModuleLoader__.load({
         tabIndex: -1,
         onClick: (event) => { event.stopPropagation(); onClick(event) },
       },
-      h('svg', { viewBox: '0 0 16 16', width: 12, height: 12, 'aria-hidden': 'true', focusable: 'false' },
-        [].concat(glyph).map((d, index) => (typeof d === 'string'
-          ? h('path', { key: index, d, fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' })
-          : h('circle', { key: index, cx: d[0], cy: d[1], r: d[2], fill: 'currentColor' }))),
-      ),
+      h(Glyph, { paths: glyph, size }),
     )
 
-    const PLUS = ['M8 3.4v9.2M3.4 8h9.2']
-    const DOTS = [[3, 8, 1.3], [8, 8, 1.3], [13, 8, 1.3]]
-    const SEARCH = ['M7.1 2.4a4.7 4.7 0 1 1 0 9.4 4.7 4.7 0 0 1 0-9.4zM10.7 10.7L14 14']
-    const FOLDER_PLUS = ['M2.4 5.2h11.2M2.4 5.2v6.6h11.2V5.2M6.6 5.2V3.4h2.8v1.8M8.2 7.6v2.6M6.9 8.9h2.6']
-    const VIEW_GRID = ['M2.4 3.6h4.4v3.2H2.4M9.2 3.6h4.4v3.2H9.2M2.4 9.2h4.4v3.2H2.4M9.2 9.2h4.4v3.2H9.2']
-    const VIEW_LIST = ['M2.8 4.4h10.4M2.8 8h10.4M2.8 11.6h6.4']
-    const CLOSE = ['M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2']
-    const COLLAPSE = ['M2.6 4.2h10.8M2.6 8h10.8M2.6 11.8h10.8M5 4.2l3 3.8-3 3.8']
+    /*
+     * Toolbar and control glyphs, all Tabler outline paths (MIT — see NOTICE.md).
+     *
+     * The header's fourth control collapses every group. Tabler has no literal
+     * "collapse tree" glyph; `fold`, `fold-up` and `arrows-minimize` all carry
+     * four or eight small strokes that turn into a smear at 14px. `chevrons-up`
+     * is the one that still reads as a shape at this size, and "fold everything
+     * up" is what the button does.
+     */
+    const PLUS = ['M12 5l0 14', 'M5 12l14 0']
+    const DOTS = ['M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0', 'M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0']
+    const SEARCH = ['M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0', 'M21 21l-6 -6']
+    const FOLDER_PLUS = ['M12 19h-7a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v3.5', 'M16 19h6', 'M19 16v6']
+    const VIEW_GRID = [
+      'M4 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4',
+      'M14 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4',
+      'M4 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4',
+      'M14 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4',
+    ]
+    const VIEW_LIST = ['M9 6l11 0', 'M9 12l11 0', 'M9 18l11 0', 'M5 6l0 .01', 'M5 12l0 .01', 'M5 18l0 .01']
+    const CLOSE = ['M18 6l-12 12', 'M6 6l12 12']
+    const COLLAPSE = ['M7 11l5 -5l5 5', 'M7 17l5 -5l5 5']
+    const CHEVRON_RIGHT = ['M9 6l6 6l-6 6']
 
     /**
      * Where a click wants its popup: the lower-left corner of the control that
@@ -1106,10 +1135,19 @@ window.__ModuleLoader__.load({
         ),
     )
 
-    /** The "not in any group" bucket: a drop surface plus the loose projects. */
-    const UngroupedSection = ({ section, t, drag, handlers, children }) => h(
+    /**
+     * The "not in any group" bucket: a drop surface plus the loose projects.
+     *
+     * `separated` draws the rule ABOVE this section. It is passed in rather than
+     * baked into the class because Ungrouped is always last and may also be
+     * first: with no groups at all, an unconditional top border becomes a
+     * stray rule above the very first row. The band rule under the pinned
+     * section makes the same decision from the other side (see renderBody), so
+     * one seam never gets painted twice.
+     */
+    const UngroupedSection = ({ section, t, drag, handlers, separated, children }) => h(
       'div',
-      { className: 'dwg-group dwg-groupLoose' },
+      { className: cx('dwg-group dwg-groupLoose', separated && 'dwg-groupLooseSep') },
       h(
         'div',
         {
@@ -2055,6 +2093,7 @@ window.__ModuleLoader__.load({
           t,
           drag: { over: dragOver },
           handlers: dropHandlers(),
+          separated: model.groups.length > 0,
           children: renderProjects(model.ungrouped.projects, model.ungrouped.key),
         }),
       ]
@@ -2157,10 +2196,15 @@ window.__ModuleLoader__.load({
         }
         if (loading) return h('div', { className: 'dwg-hint dwg-loading' }, '…')
         /**
-         * A rule between the pinned section and the rest. Pinned groups sit in
-         * their own band above this line, which is the only affordance that
-         * says "unpin moves you down there" — without it the two bands look
-         * like one list that reordered itself for no reason.
+         * The rule under the pinned band.
+         *
+         * This used to be drawn from BOTH sides — the pinned band inserted its
+         * own rule and Ungrouped carried an unconditional border-top — so with
+         * every group pinned the two landed a few pixels apart and the seam
+         * read as a stray double line. Now exactly one rule owns each seam: the
+         * pinned band draws its own (it is the only band that can move), and
+         * Ungrouped draws one only when a real group sits directly above it.
+         * Its section is always last, so nothing else can close that seam.
          */
         return model.pinned.length > 0 && (model.groups.length > 0 || model.ungrouped.projects.length > 0)
           ? [...sections.slice(0, model.pinned.length),
@@ -2182,6 +2226,7 @@ window.__ModuleLoader__.load({
             h(IconButton, {
               label: searchOpen || query.length > 0 ? t('search.close') : t('search'),
               glyph: SEARCH,
+              size: 16,
               className: cx('dwg-iconBtnHeader', (searchOpen || query.length > 0) && 'dwg-iconBtnOn'),
               // The same button opens AND closes the field: one permanent
               // affordance that does not move, rather than an open control plus
@@ -2196,9 +2241,12 @@ window.__ModuleLoader__.load({
                 window.setTimeout(() => searchRef.current?.focus?.({ preventScroll: true }), 0)
               },
             }),
-            h(IconButton, { label: t('act.newProject'), glyph: FOLDER_PLUS, className: 'dwg-iconBtnHeader', onClick: () => { void newProject(null) } }),
-            h(IconButton, { label: t('act.newGroup'), glyph: PLUS, className: 'dwg-iconBtnHeader', onClick: () => openDialog({ kind: 'create' }) }),
-            h(IconButton, { label: t('act.collapseAll'), glyph: COLLAPSE, className: 'dwg-iconBtnHeader', onClick: () => { void commit('collapseAll', {}) } }),
+            // 16px inside the 24px header box: Tabler's glyphs are drawn for a
+            // 24px display, and at 14px the two chevrons of `collapseAll` merge
+            // into one thick stroke while the rest lose their counters.
+            h(IconButton, { label: t('act.newProject'), glyph: FOLDER_PLUS, size: 16, className: 'dwg-iconBtnHeader', onClick: () => { void newProject(null) } }),
+            h(IconButton, { label: t('act.newGroup'), glyph: PLUS, size: 16, className: 'dwg-iconBtnHeader', onClick: () => openDialog({ kind: 'create' }) }),
+            h(IconButton, { label: t('act.collapseAll'), glyph: COLLAPSE, size: 16, className: 'dwg-iconBtnHeader', onClick: () => { void commit('collapseAll', {}) } }),
           ),
         ),
         searchOpen || query.length > 0
@@ -2208,8 +2256,7 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'dwg-search' },
-              h('svg', { viewBox: '0 0 16 16', width: 13, height: 13, 'aria-hidden': 'true', focusable: 'false', className: 'dwg-searchIcon' },
-                h('path', { d: SEARCH[0], fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' })),
+              h(Glyph, { paths: SEARCH, size: 13, className: 'dwg-searchIcon' }),
               h('input', {
                 ref: searchRef,
                 className: 'dwg-searchInput',
@@ -2276,13 +2323,15 @@ window.__ModuleLoader__.load({
 .dwg-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 8px 6px;flex:0 0 auto}
 /* Rail variant: the collapsed sidebar is 49px wide, so the tree is not
    rendered at all; these three controls mirror the shell rail's 36px rhythm and
-   each of them expands the sidebar before acting. */
+   each of them expands the sidebar before acting. The doubled class is
+   deliberate: the 20px base rule sits LATER in this sheet, so a single-class
+   selector would lose to it and every rail button would render at 20px. */
 .dwg-rootRail{gap:8px;padding-top:2px;align-items:flex-start}
-.dwg-railBtn{width:36px;height:36px;border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary)}
+.dwg-iconBtn.dwg-railBtn{width:36px;height:36px;border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary)}
 .dwg-railBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .dwg-headerTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-secondary)}
 .dwg-headerActions{display:flex;align-items:center;gap:2px;flex:0 0 auto}
-.dwg-iconBtnHeader{width:24px;height:24px;border-radius:6px}
+.dwg-iconBtn.dwg-iconBtnHeader{width:24px;height:24px;border-radius:6px}
 .dwg-iconBtnOn{color:var(--dsw-alias-state-business-primary)}
 .dwg-searchRow{display:flex;align-items:center;gap:4px;padding:0 8px 6px;flex:0 0 auto}
 .dwg-search{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;height:28px;padding:0 6px;box-sizing:border-box;border-radius:8px;border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1)}
@@ -2296,13 +2345,21 @@ window.__ModuleLoader__.load({
    still paint after this one. */
 .dwg-searchInput:focus,.dwg-searchInput:focus-visible{outline:0}
 .dwg-searchInput::placeholder{color:var(--dsw-alias-label-tertiary)}
-.dwg-searchClear{width:18px;height:18px;border:0;border-radius:50%;background:transparent;color:var(--dsw-alias-label-secondary);flex:0 0 auto}
-.dwg-viewBtn{width:28px;height:28px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);flex:0 0 auto}
-.dwg-viewBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+/* Every variant that resizes the shared 20px base must name BOTH classes: the
+   base rule sits later in this sheet, so an equal-specificity selector loses
+   and the control silently renders 20px. */
+.dwg-iconBtn.dwg-searchClear{width:18px;height:18px;border:0;border-radius:50%;background:transparent;color:var(--dsw-alias-label-secondary);flex:0 0 auto}
+.dwg-iconBtn.dwg-viewBtn{width:28px;height:28px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);flex:0 0 auto}
+.dwg-iconBtn.dwg-viewBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dwg-notice{margin:0 8px 6px;padding:6px 8px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-state-error-primary);color:var(--dsw-alias-label-primary);font-size:12px;line-height:17px;flex:0 0 auto;word-break:break-word}
 .dwg-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;margin-left:-4px;padding:0 4px 12px;scrollbar-width:thin}
 .dwg-group{display:flex;flex-direction:column}
-.dwg-groupLoose{margin-top:3px;padding-top:3px;border-top:1px solid var(--dsw-alias-border-l2)}
+/* Ungrouped sits last. The top rule belongs to the section only when a real
+   group is directly above it: the pinned band already owns the seam under
+   itself, and with no groups at all there is no seam to draw. Painting both
+   sides is what produced two rules a few pixels apart. */
+.dwg-groupLoose{margin-top:3px;padding-top:3px}
+.dwg-groupLooseSep{border-top:1px solid var(--dsw-alias-border-l2)}
 .dwg-block{display:flex;flex-direction:column}
 .dwg-row{box-sizing:border-box;display:flex;align-items:center;gap:6px;height:32px;padding:0 8px;border-radius:12px;cursor:pointer;color:var(--dsw-alias-label-primary);user-select:none;position:relative}
 .dwg-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
@@ -2317,6 +2374,9 @@ window.__ModuleLoader__.load({
 .dwg-chevron{flex:0 0 auto;color:var(--dsw-alias-label-tertiary);transition:transform .12s ease}
 .dwg-chevronOpen{transform:rotate(90deg)}
 .dwg-glyph{flex:0 0 auto;color:var(--dsw-alias-label-secondary)}
+/* Icon base: every glyph in this region is a Tabler 24-grid outline, so one
+   rule sets the box and no caller has to remember a viewBox. */
+.dwg-glyphIc{flex:0 0 auto;display:block}
 /* The picker draws at 16px inside a 30px cell; the row header keeps 14px. */
 .dwg-glyphCell{width:16px;height:16px}
 .dwg-glyphAccent{color:var(--dwg-accent)}
@@ -2336,7 +2396,7 @@ window.__ModuleLoader__.load({
 .dwg-dot-ongoing{background:var(--dsw-alias-state-business-primary)}
 .dwg-leading{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;min-width:0}
 .dwg-pinMark{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--dsw-alias-label-secondary)}
-.dwg-pinnedRule{height:1px;margin:4px 8px;background:var(--dsw-alias-border-l2)}
+.dwg-pinnedRule{height:1px;margin:4px 8px 2px;background:var(--dsw-alias-border-l2)}
 .dwg-rowActions{display:none;align-items:center;gap:2px;flex:0 0 auto}
 .dwg-iconBtn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;padding:0}
 .dwg-iconBtn:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
@@ -2406,7 +2466,17 @@ window.__ModuleLoader__.load({
    variant only rebinds that fill, exactly like the shipped danger button.
    NB: no backticks anywhere in this stylesheet — it is a template literal. */
 .dwg-btnPrimary{border-color:var(--dsw-alias-button-primary-fill);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}
+/* Hover must step the FILL, not repaint it. The generic rule above replaces a
+   solid fill with the row-hover tint, which on a filled button reads as "the
+   fill disappeared and only the border is left" — the exact defect the previous
+   screenshot showed. button-primary-hover is the fill's own neighbour step in
+   each theme, so the pair stays a pair. */
+.dwg-btnPrimary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover);border-color:var(--dsw-alias-button-primary-hover)}
 .dwg-btnDanger{--dsw-alias-button-primary-fill:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-button-primary-fill);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}
+/* The error pair has no distinct hover step in the dark theme (primary and
+   secondary are both red-400 there), so the step is mixed toward the on-colour
+   label, which is white in both themes — one rule, a lighter red in both. */
+.dwg-btnDanger:hover:not(:disabled){--dsw-alias-button-primary-hover:color-mix(in srgb,var(--dsw-alias-state-error-primary) 86%,var(--dsw-alias-label-on-color));background:var(--dsw-alias-button-primary-hover);border-color:var(--dsw-alias-button-primary-hover)}
 .dwg-root:focus-visible,.dwg-row:focus-visible,.dwg-iconBtn:focus-visible,.dwg-moreBtn:focus-visible,.dwg-btn:focus-visible,.dwg-viewBtn:focus-visible,.dwg-iconCell:focus-visible,.dwg-swatch:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}
 ${COLORS.map(color => `.dwg-accent-${color}{--dwg-accent:${PALETTE[color][0]}}`).join('\n')}
 ${COLORS.map(color => `body[data-ds-dark-theme] .dwg-accent-${color}{--dwg-accent:${PALETTE[color][1]}}`).join('\n')}

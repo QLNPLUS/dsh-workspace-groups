@@ -322,6 +322,34 @@ check('CSS never uses the monochrome brand ink as an accent', !CSS.includes('var
   'use --dsw-alias-state-business-primary for interactive blue')
 check('CSS paints focus rings from the platform ring tokens', CSS.includes('var(--dsw-focus-ring-width'),
   'the shipped focus fallback names colour and width separately')
+
+/**
+ * Theme-token PAIRING rules. Each of these pinned a real defect:
+ *
+ * - A filled button's hover must step its own fill. A generic
+ *   `background: interactive-bg-hover` on a filled button REPLACES the fill
+ *   with a translucent tint, so the button reads as "fill gone, only a border
+ *   left" — what the primary Save button did.
+ * - A resized IconButton variant must name both classes, because the 20px base
+ *   rule sits later in the sheet and would win at equal specificity.
+ * - The two bands (pinned and rest) must not each draw a rule at the same seam.
+ */
+check('the primary button hover steps its own fill',
+  /\.dwg-btnPrimary:hover:not\(:disabled\)\{background:var\(--dsw-alias-button-primary-hover\)/.test(CSS),
+  'repainting a filled button with the row-hover tint erases the fill')
+check('the danger button hover steps from the error colour',
+  /\.dwg-btnDanger:hover:not\(:disabled\)\{--dsw-alias-button-primary-hover:color-mix\(/.test(CSS),
+  'the theme has no distinct danger hover step, so one is mixed here')
+check('every resized icon-button variant names its base class',
+  ['.dwg-iconBtn.dwg-iconBtnHeader{', '.dwg-iconBtn.dwg-railBtn{', '.dwg-iconBtn.dwg-viewBtn{', '.dwg-iconBtn.dwg-searchClear{']
+    .every(selector => CSS.includes(selector)),
+  'the shared 20px base is declared later in the sheet')
+check('the Ungrouped top rule is a variant, not unconditional',
+  CSS.includes('.dwg-groupLoose{') && CSS.includes('.dwg-groupLooseSep{border-top:'),
+  'an unconditional border would also draw above the first row when there are no groups')
+check('exactly one rule owns the seam under the pinned band',
+  !CSS.includes('.dwg-pinnedRule{border') && !CSS.includes('dwg-pinnedRule{height:1px;margin:4px 8px;'),
+  'the pinned band draws its own rule; a second one a few rows below is the reported double line')
 check('the search field suppresses the square input ring',
   /\.dwg-searchInput:focus-visible\{outline:0\}|\.dwg-searchInput:focus,\.dwg-searchInput:focus-visible\{outline:0\}/.test(CSS),
   'the rounded container shows focus; a square ring inside it reads as a glitch')

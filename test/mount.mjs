@@ -492,6 +492,13 @@ if (mountError === null) {
         afterPin[0]?.id === 'g2' && afterPin[1]?.id === 'g1', JSON.stringify(afterPin))
       check('the pinned divider separates the two bands',
         container.querySelector('.dwg-pinnedRule') !== null)
+      // The pinned band draws ONE rule. Ungrouped used to also carry an
+      // unconditional border-top, so the two landed a few pixels apart and the
+      // seam read as a stray double line.
+      const seams = [...container.querySelectorAll('.dwg-pinnedRule')]
+        .length + [...container.querySelectorAll('.dwg-groupLooseSep')].length
+      check('the seam between bands is drawn exactly once', seams === 1,
+        `pinnedRule + groupLooseSep = ${seams}`)
       // A pinned row must be visually distinguishable without an icon; the
       // accent bar and the band divider carry that, so nothing else is drawn.
       check('no pin glyph is drawn inside the menu',
