@@ -524,6 +524,38 @@ if (wideTree !== null) {
   check('each conversation row is addressable for a search reveal',
     walk(wideTree).some(node => node.props['data-dwg-session'] === 's2'))
   check('empty groups hint at the drop target', text.includes('拖项目到这里'))
+  /**
+   * The Ungrouped bucket is drawn from the model, never unconditionally.
+   *
+   * It used to be a fixed last section, so with every project filed away the
+   * tree still ended in a "未分组" heading over a dashed "drop a project here"
+   * placeholder — furniture describing a section with nothing in it. It is
+   * gated now (see `showUngrouped`), and the gate has a second input: a project
+   * drag brings the strip back, because dropping on it is the only pointer
+   * gesture that takes a project OUT of a group.
+   */
+  check('the ungrouped section is gated, not unconditional',
+    bundle.includes('const showUngrouped =') && bundle.includes('...(showUngrouped'),
+    'a fixed last section leaves an empty heading behind')
+  check('the band seam reads the same gate as the strip',
+    bundle.includes('model.groups.length > 0 || showUngrouped'),
+    'the seam must not be decided from a different expression than the row')
+  check('a project drag re-opens the drop target',
+    bundle.includes("dragging !== null && dragging.kind === 'project'"),
+    'the strip is the only pointer way out of a group')
+  check('the drag payload is state, not only a ref',
+    bundle.includes('const [dragging, setDragging] = useState(null)')
+    && bundle.includes('setDragging(payload)') && bundle.includes('setDragging(null)'),
+    'a ref write does not re-render, so the target would appear too late')
+  check('the truly empty tree gets a sentence instead of a blank panel',
+    text.includes('还没有项目和分组') === false && bundle.includes("t('tree.empty')"),
+    'the normal fixture has projects, so the hint must not paint here')
+  check('the empty-tree hint is not painted over archived groups',
+    bundle.includes('model.archivedGroups.length === 0'),
+    'the drawer still has something to offer, so the tree keeps its shape')
+  check('the empty-tree copy exists in both languages',
+    localeRegistrations[0].table.zh['tree.empty'] !== undefined
+    && localeRegistrations[0].table.en['tree.empty'] !== undefined)
 }
 
 const railTree = render(React.createElement(registration.component, baseProps(false)))

@@ -17,9 +17,14 @@ DSH 的侧栏把每一个工作区平铺成一列。项目一多，这一列就�
 │  └─ acme-admin
 ├─ 学习
 │  └─ rust-notes
-└─ 未分组                ← 拖到这里即移出分组
+└─ 未分组                ← 拖到这里即移出分组（组内没有项目时不显示）
    └─ scratch
 ```
+
+> 「未分组」只在它确实装东西时出现。项目全都归了组，这一段就不画——它曾是一条
+> 带虚框占位的空标题，占着本该属于分组的位置。但**开始拖动项目时它会回来**，
+> 因为那是把项目移出分组的唯一指针手势，落点必须在指针到达之前就存在。
+> 一个项目和分组都没有的全新环境，树里给出的是一行提示而不是空面板。
 
 ## 功能
 
@@ -160,6 +165,8 @@ node test/preview.mjs                 # → docs/preview-tree.html + preview-dia
 node test/preview.mjs --dark          # 深色版本
 node test/preview.mjs --all-groups    # 全部取消置顶（检查「分组 / 未分组」那条缝）
 node test/preview.mjs --all-pinned    # 全部置顶（检查另一侧的缝）
+node test/preview.mjs --filed         # 每个项目都归了组（「未分组」那一段必须消失）
+node test/preview.mjs --blank         # 一个项目、一个分组都没有（空环境的提示行）
 ```
 
 - `preview-tree.html`：整棵树的真实渲染

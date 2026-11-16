@@ -150,6 +150,7 @@ window.__ModuleLoader__.load({
       'search.results': '搜索结果',
       'empty.group': '拖项目到这里',
       'empty.ungrouped': '把项目拖到这里即可移出分组',
+      'tree.empty': '还没有项目和分组，用右上角的按钮新建。',
       'badge.pending': '{n} 待处理',
       'badge.running': '{n} 运行中',
       'badge.unread': '{n} 新完成',
@@ -263,6 +264,7 @@ window.__ModuleLoader__.load({
       'search.results': 'Search results',
       'empty.group': 'Drag projects here',
       'empty.ungrouped': 'Drop a project here to leave its group',
+      'tree.empty': 'No projects or groups yet. Use the controls at the top right.',
       'badge.pending': '{n} waiting',
       'badge.running': '{n} running',
       'badge.unread': '{n} finished',
@@ -1670,6 +1672,16 @@ window.__ModuleLoader__.load({
       const [archivedOpen, setArchivedOpen] = useState(false)
       const [menu, setMenu] = useState(null)
       const [dragOver, setDragOver] = useState(null)
+      /**
+       * What is being dragged, as STATE rather than a ref.
+       *
+       * The Ungrouped strip is hidden while it is empty (see `showUngrouped`),
+       * but a project drag needs it back: dropping there is the only pointer
+       * gesture that takes a project out of a group. `dragRef` cannot drive
+       * that, because a ref write does not re-render — the strip has to exist
+       * before the pointer reaches it, not after the first dragover rescues it.
+       */
+      const [dragging, setDragging] = useState(null)
       const [reveal, setReveal] = useState(null)
 
       const treeRef = useRef(null)
@@ -1791,6 +1803,7 @@ window.__ModuleLoader__.load({
 
       const beginDrag = useCallback((event, payload) => {
         dragRef.current = payload
+        setDragging(payload)
         try {
           event.dataTransfer.effectAllowed = 'move'
           event.dataTransfer.setData('text/plain', payload.title ?? '')
@@ -1799,6 +1812,7 @@ window.__ModuleLoader__.load({
 
       const endDrag = useCallback(() => {
         dragRef.current = null
+        setDragging(null)
         setDragOver(null)
       }, [])
 
@@ -1825,6 +1839,7 @@ window.__ModuleLoader__.load({
       const drop = useCallback((event, key) => {
         const payload = dragRef.current
         dragRef.current = null
+        setDragging(null)
         setDragOver(null)
         if (payload === null) return
         event.preventDefault()
@@ -2070,6 +2085,27 @@ window.__ModuleLoader__.load({
         ...(fold === undefined ? {} : { toggle: () => toggleGroup(fold) }),
       })
 
+      /**
+       * Is the Ungrouped bucket worth a row?
+       *
+       * An empty Ungrouped is dead weight: it is a heading with a dashed
+       * placeholder under it, sitting where the eye expects more groups, and the
+       * first thing a new user reads as "there is an empty section in here".
+       * With no groups at all it is not even true — every project falls through
+       * to it, so labelling the whole list "Ungrouped" carries no information.
+       *
+       * Two exceptions keep it alive:
+       *  1. projects actually live there;
+       *  2. a project is being dragged. Dropping onto the strip is the only
+       *     POINTER gesture that takes a project out of a group, so the target
+       *     must come back while the drag is possible. That is why `dragging`
+       *     is state and not the `dragRef` — a ref write does not re-render, and
+       *     a target that appears only after the pointer has already passed
+       *     over it is a target the user cannot hit.
+       */
+      const showUngrouped = model.ungrouped.projects.length > 0
+        || (dragging !== null && dragging.kind === 'project')
+
       const sections = [
         ...model.pinned.map(group => h(GroupSection, {
           key: group.key,
@@ -2087,15 +2123,17 @@ window.__ModuleLoader__.load({
           handlers: dropHandlers(point => setMenu({ kind: 'group', group, anchor: point }), group),
           children: renderProjects(group.allProjects, group.key),
         })),
-        h(UngroupedSection, {
-          key: model.ungrouped.key,
-          section: model.ungrouped,
-          t,
-          drag: { over: dragOver },
-          handlers: dropHandlers(),
-          separated: model.groups.length > 0,
-          children: renderProjects(model.ungrouped.projects, model.ungrouped.key),
-        }),
+        ...(showUngrouped
+          ? [h(UngroupedSection, {
+            key: model.ungrouped.key,
+            section: model.ungrouped,
+            t,
+            drag: { over: dragOver },
+            handlers: dropHandlers(),
+            separated: model.groups.length > 0,
+            children: renderProjects(model.ungrouped.projects, model.ungrouped.key),
+          })]
+          : []),
       ]
 
       const menuModel = menu === null
@@ -2196,6 +2234,24 @@ window.__ModuleLoader__.load({
         }
         if (loading) return h('div', { className: 'dwg-hint dwg-loading' }, '…')
         /**
+         * Nothing to show at all.
+         *
+         * With no projects, no groups and no archived groups, the tree would
+         * otherwise be a single header strip — and since an empty Ungrouped is
+         * now hidden, an entirely blank panel. A blank panel reads as a failed
+         * load, so the truly empty case gets one line of orientation instead.
+         *
+         * Archived groups alone do not count: the drawer below still has
+         * something to offer, so the tree keeps its normal (empty) shape. A
+         * project drag cannot reach this branch either — for any project to be
+         * draggable it must sit in a group (no groups) or in Ungrouped (not
+         * empty), so both input sets here are already zero.
+         */
+        if (model.pinned.length === 0 && model.groups.length === 0
+          && model.ungrouped.projects.length === 0 && model.archivedGroups.length === 0) {
+          return h('div', { className: 'dwg-empty' }, t('tree.empty'))
+        }
+        /**
          * The rule under the pinned band.
          *
          * This used to be drawn from BOTH sides — the pinned band inserted its
@@ -2205,8 +2261,12 @@ window.__ModuleLoader__.load({
          * pinned band draws its own (it is the only band that can move), and
          * Ungrouped draws one only when a real group sits directly above it.
          * Its section is always last, so nothing else can close that seam.
+         * `showUngrouped` — not `ungrouped.projects.length` — because the strip
+         * can also be on screen while a project is dragged (it is the drop
+         * target for leaving a group); the band rule has to know about the row
+         * that is actually painted, or the strip appears with no seam above it.
          */
-        return model.pinned.length > 0 && (model.groups.length > 0 || model.ungrouped.projects.length > 0)
+        return model.pinned.length > 0 && (model.groups.length > 0 || showUngrouped)
           ? [...sections.slice(0, model.pinned.length),
             h('div', { key: 'dwg-pinnedRule', className: 'dwg-pinnedRule', 'aria-hidden': 'true' }),
             ...sections.slice(model.pinned.length)]

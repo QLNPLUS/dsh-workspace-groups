@@ -681,6 +681,202 @@ globalThis.fetch = realFetch
 await act(async () => { brokenRoot.unmount() })
 check('the failed mount unmounts cleanly', brokenContainer.innerHTML === '')
 
+// ── an empty Ungrouped is not a row ──────────────────────────────────
+// The reported defect: with every project filed into a group, the tree still
+// ended in a "未分组" heading over a dashed "drop a project here" placeholder.
+// That placeholder is a permanent piece of furniture describing a section with
+// nothing in it, and with no groups at all it is not even meaningful — every
+// project falls through to it.
+//
+// The exception is the one that keeps the feature alive: that strip is the only
+// POINTER target that takes a project OUT of a group. So it must reappear the
+// moment a project drag starts, which is why the drag flag is state and not a
+// ref (a ref write does not re-render, and a target that shows up only after the
+// pointer has passed over it cannot be hit).
+console.log('▸ mounting with every project filed into a group')
+const DOC_C = {
+  version: 1,
+  groups: [
+    { id: 'g1', name: '客户端项目', color: 'blue', icon: 'code', pinned: false, collapsed: false, order: 0, createdAt: 1 },
+    { id: 'g2', name: '学习', color: 'green', icon: 'book', pinned: false, collapsed: false, order: 1, createdAt: 2 },
+  ],
+  archivedGroups: [],
+  // No unassigned workspace: every project belongs to a group.
+  assign: { w2: 'g1', w3: 'g2' },
+  orders: { g1: ['w2'], g2: ['w3'], __ungrouped__: [] },
+  workspaceState: { w2: { expanded: true, showAll: true } },
+  ui: { view: 'grouped' },
+  settings: { previewSessions: 2, searchLimit: 80 },
+  persisted: true,
+  error: null,
+  file: 'C:/fake/state-c.json',
+}
+let documentC = structuredClone(DOC_C)
+const callsC = []
+globalThis.fetch = async (path, init) => {
+  callsC.push({ path, method: init?.method ?? 'GET', body: init?.body })
+  if (init?.body !== undefined) {
+    const request = JSON.parse(init.body)
+    // Mirror the one mutation this section exercises, so the tree can show the
+    // project actually leaving its group rather than a wishful local state.
+    if (request.action === 'assignWorkspace') {
+      documentC = structuredClone(documentC)
+      documentC.assign[request.payload.workspaceId] = request.payload.groupId
+    }
+  }
+  return { ok: true, status: 200, json: async () => documentC }
+}
+
+const registrations3 = []
+const fakeCtx3 = {
+  ...fakeCtx,
+  locale: {
+    register(ns, table) { localeTable = table },
+    bind: fakeCtx.locale.bind,
+  },
+  slots: {
+    currentKey: null,
+    inject(key, callback) {
+      const previous = this.currentKey
+      this.currentKey = key
+      try { callback() } finally { this.currentKey = previous }
+      return () => {}
+    },
+    register(options, component) { registrations3.push({ options, component }); return () => {} },
+  },
+}
+plugin.apply(fakeCtx3)
+const component3 = registrations3[0].component
+const injectFace3 = registrations3[0].options.inject()
+
+// w1 is the fixture's unassigned project; drop it so nothing falls through.
+const propsC = {
+  ...props,
+  useWorkspaces: selectHook({
+    items: workspaces.filter(item => item.workspaceId !== 'w1'),
+    phase: 'ready', state: 'idle', error: null,
+    archivedSessionIds: ['s2'], pinnedSessionIds: [],
+  }),
+  ...injectFace3,
+}
+const containerC = document.createElement('div')
+document.body.appendChild(containerC)
+const rootC = ReactDOMClient.createRoot(containerC)
+let mountCError = null
+try {
+  await act(async () => { rootC.render(React.createElement(component3, propsC)) })
+} catch (error) {
+  mountCError = error
+}
+check('the filed-away fixture mounts', mountCError === null, mountCError?.message)
+
+if (mountCError === null) {
+  const looseHeader = () => containerC.querySelector('[data-dwg-group="u:__ungrouped__"]')
+  check('an empty Ungrouped is not rendered',
+    looseHeader() === null, 'a heading over nothing is permanent furniture')
+  check('the dashed drop placeholder is gone with it',
+    !containerC.innerHTML.includes('把项目拖到这里即可移出分组'))
+  check('both real groups still render', containerC.querySelectorAll('.dwg-rowGroup').length === 2)
+
+  const projectRowC = containerC.querySelector('[data-dwg-project="w2"]')
+  check('the project row is draggable', projectRowC !== null && projectRowC.draggable === true)
+  if (projectRowC !== null) {
+    // jsdom does not synthesise drags; dispatch the two events the row listens
+    // for. `beginDrag` writes to dataTransfer inside a try/catch, so a synthetic
+    // event without one is exactly the path the browser may also take.
+    await act(async () => {
+      projectRowC.dispatchEvent(new jsdomWindow.Event('dragstart', { bubbles: true, cancelable: true }))
+    })
+    check('a project drag brings the Ungrouped strip back',
+      looseHeader() !== null, 'the drop target must exist before the pointer arrives')
+    check('the resurrected strip says what it is for',
+      containerC.innerHTML.includes('把项目拖到这里即可移出分组'))
+
+    if (looseHeader() !== null) {
+      await act(async () => {
+        looseHeader().dispatchEvent(new jsdomWindow.Event('drop', { bubbles: true, cancelable: true }))
+      })
+      const moved = callsC.filter(call => call.method === 'POST'
+        && JSON.parse(call.body).action === 'assignWorkspace').at(-1)
+      check('dropping on it really takes the project out of its group', moved !== undefined
+        && JSON.parse(moved.body).payload.workspaceId === 'w2'
+        && JSON.parse(moved.body).payload.groupId === '',
+        moved === undefined ? 'no assignWorkspace was posted' : moved.body)
+
+      await act(async () => {
+        projectRowC.dispatchEvent(new jsdomWindow.Event('dragend', { bubbles: true }))
+      })
+      // The strip persists for the opposite reason now: it has content. The
+      // placeholder is what must be gone.
+      check('after the drop the strip stays, because it now holds a project',
+        looseHeader() !== null && !containerC.innerHTML.includes('把项目拖到这里即可移出分组'))
+      check('the dropped project appears under Ungrouped',
+        containerC.querySelector('[data-dwg-group="u:__ungrouped__"]')
+        !== null && containerC.innerHTML.includes('beta'))
+    }
+  }
+  await act(async () => { rootC.unmount() })
+  check('the filed-away mount unmounts cleanly', containerC.innerHTML === '')
+}
+
+// ── nothing at all: one line of orientation, not a blank panel ───────
+// Hiding an empty Ungrouped turns a brand-new profile into a header strip over
+// an empty panel, which reads as a failed load. So the truly empty case gets a
+// sentence instead of the silence.
+console.log('▸ mounting with no projects and no groups')
+const DOC_D = {
+  version: 1, groups: [], archivedGroups: [], assign: {}, orders: { __ungrouped__: [] },
+  workspaceState: {}, ui: { view: 'grouped' },
+  settings: { previewSessions: 2, searchLimit: 80 },
+  persisted: true, error: null, file: 'C:/fake/state-d.json',
+}
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => DOC_D })
+const registrations4 = []
+const fakeCtx4 = {
+  ...fakeCtx,
+  locale: {
+    register(ns, table) { localeTable = table },
+    bind: fakeCtx.locale.bind,
+  },
+  slots: {
+    currentKey: null,
+    inject(key, callback) {
+      const previous = this.currentKey
+      this.currentKey = key
+      try { callback() } finally { this.currentKey = previous }
+      return () => {}
+    },
+    register(options, component) { registrations4.push({ options, component }); return () => {} },
+  },
+}
+plugin.apply(fakeCtx4)
+const injectFace4 = registrations4[0].options.inject()
+const containerD = document.createElement('div')
+document.body.appendChild(containerD)
+const rootD = ReactDOMClient.createRoot(containerD)
+let mountDError = null
+try {
+  await act(async () => {
+    rootD.render(React.createElement(registrations4[0].component, {
+      ...props,
+      useWorkspaces: selectHook({ items: [], phase: 'ready', state: 'idle', error: null, archivedSessionIds: [], pinnedSessionIds: [] }),
+      ...injectFace4,
+    }))
+  })
+} catch (error) {
+  mountDError = error
+}
+check('the empty fixture mounts', mountDError === null, mountDError?.message)
+if (mountDError === null) {
+  check('the empty tree explains itself instead of sitting blank',
+    containerD.innerHTML.includes('还没有项目和分组'))
+  check('the empty tree renders no Ungrouped header',
+    containerD.querySelector('[data-dwg-group="u:__ungrouped__"]') === null)
+  await act(async () => { rootD.unmount() })
+  check('the empty mount unmounts cleanly', containerD.innerHTML === '')
+}
+globalThis.fetch = realFetch
+
 console.log('')
 console.log(failures === 0 ? '▸ PASS — real DOM mount, effects, clicks and portals all work'
   : `▸ FAIL — ${failures} failing check(s)`)

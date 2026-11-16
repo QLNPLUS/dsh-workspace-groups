@@ -11,6 +11,10 @@
  *   node test/preview.mjs --dark           → the dark variants
  *   node test/preview.mjs --all-groups     → a fixture with no pinned band,
  *                                            the case that had two rules
+ *   node test/preview.mjs --all-pinned     → a fixture where every group is pinned
+ *   node test/preview.mjs --filed          → every project filed into a group,
+ *                                            so the Ungrouped strip must vanish
+ *   node test/preview.mjs --blank          → no projects, no groups at all
  *
  * The fake parts are only the DSH context and the fixture document — the same
  * seams test/mount.mjs uses. Nothing about the plugin itself is simulated.
@@ -52,7 +56,9 @@ const { JSDOM } = createRequire(import.meta.url)(jsdomPath)
 const dark = process.argv.includes('--dark')
 const variant = process.argv.includes('--all-groups')
 const allPinned = process.argv.includes('--all-pinned')
-const suffix = `${dark ? '-dark' : ''}${variant ? '-flat' : ''}${allPinned ? '-pinned' : ''}`
+const filed = process.argv.includes('--filed')
+const blank = process.argv.includes('--blank')
+const suffix = `${dark ? '-dark' : ''}${variant ? '-flat' : ''}${allPinned ? '-pinned' : ''}${filed ? '-filed' : ''}${blank ? '-blank' : ''}`
 
 /** The theme's own values, copied from dsh-client-ui-theme design-platform.css. */
 const LIGHT = `
@@ -127,7 +133,30 @@ const DOCUMENT = variant
       ...baseDocument,
       groups: baseDocument.groups.map(group => ({ ...group, pinned: true })),
     }
-    : baseDocument
+    : filed
+      // Every project belongs to a group, so the Ungrouped strip has nothing
+      // to hold and must not be drawn at all.
+      ? {
+        ...baseDocument,
+        orders: { ...baseDocument.orders, __ungrouped__: [] },
+      }
+      : blank
+        // A brand-new profile: no projects and no groups. The tree has to say
+        // something rather than sit as a header over an empty panel.
+        ? {
+          version: 1, groups: [], archivedGroups: [], assign: {},
+          orders: { __ungrouped__: [] }, workspaceState: {},
+          ui: { view: 'grouped' }, settings: { previewSessions: 2, searchLimit: 80 },
+          persisted: true, error: null, file: 'C:/preview/state.json',
+        }
+        : baseDocument
+
+/** The projects the fixture actually has; `--filed` and `--blank` drop some. */
+const WORKSPACES_FIXTURE = blank
+  ? []
+  : filed
+    ? WORKSPACES.filter(item => item.workspaceId !== 'w1')
+    : WORKSPACES
 
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
   url: 'http://127.0.0.1/', pretendToBeVisual: true,
@@ -197,7 +226,7 @@ const selectHook = value => selector => selector(value)
 const props = {
   wide: true,
   expandSidebar: () => {},
-  useWorkspaces: selectHook({ items: WORKSPACES, phase: 'ready', state: 'idle', error: null, archivedSessionIds: [], pinnedSessionIds: [] }),
+  useWorkspaces: selectHook({ items: WORKSPACES_FIXTURE, phase: 'ready', state: 'idle', error: null, archivedSessionIds: [], pinnedSessionIds: [] }),
   useSessions: selectHook(SESSIONS),
   useSessionStatus: selectHook(new Map()),
   useSectionScroller: () => ({ bindScrollerRef: () => {} }),
