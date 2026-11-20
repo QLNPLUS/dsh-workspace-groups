@@ -73,8 +73,36 @@ const DOCUMENT = {
 /** What the fake server currently answers with, mutated by each POST. */
 let serverDocument = structuredClone(DOCUMENT)
 const calls = []
+/**
+ * What the bundle learns from `ds-harness-remote/status` before its first read.
+ *
+ * The bundle probes that route to learn which workspace list it is describing,
+ * so this fake Host has to answer it; `REMOTE_STATUS` is flipped by the
+ * remote-mode section near the end of the file.
+ */
+const REMOTE_STATUS = { mode: 'local' }
 globalThis.fetch = async (path, init) => {
-  calls.push({ path, method: init?.method ?? 'GET', body: init?.body })
+  const url = typeof path === 'string' ? path : String(path)
+  const cut = url.indexOf('?')
+  const bare = cut === -1 ? url : url.slice(0, cut)
+  const search = cut === -1 ? '' : url.slice(cut)
+  calls.push({ path: bare, search, method: init?.method ?? 'GET', body: init?.body })
+  if (bare === '/ds-harness-remote/status') {
+    const request = JSON.parse(init.body)
+    const value = REMOTE_STATUS.mode === 'remote'
+      ? { mode: 'remote', connected: true, target: { deviceId: REMOTE_STATUS.deviceId, name: REMOTE_STATUS.name } }
+      : { mode: 'local', connected: false }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value } }),
+    }
+  }
+  /** Echo the scope the way the real Host does; the page trusts the echo. */
+  const echo = document => {
+    const scope = new URLSearchParams(search).get('scope')
+    return scope === null ? document : { ...document, scope }
+  }
   if (init?.body !== undefined) {
     const request = JSON.parse(init.body)
     if (request.action === 'collapseAll') {
@@ -134,7 +162,7 @@ globalThis.fetch = async (path, init) => {
       }
     }
   }
-  return { ok: true, status: 200, json: async () => serverDocument }
+  return { ok: true, status: 200, json: async () => echo(serverDocument) }
 }
 
 // ── load the bundle ───────────────────────────────────────────────────────
@@ -248,8 +276,10 @@ const click = async (element) => {
 }
 
 if (mountError === null) {
+  check('the mount effect probed the remote plugin for the current Host',
+    calls.some(call => call.method === 'POST' && call.path === '/ds-harness-remote/status'))
   check('the mount effect read the Host document', calls.some(call => call.method === 'GET'
-    && call.path === '/api/workspace-groups/state'))
+    && call.path === '/api/workspace-groups/state' && call.search === '?scope=local'))
   check('the tree reached the DOM', html().includes('dwg-rowGroup'))
   check('the real DOM carries the group names', html().includes('客户端项目') && html().includes('学习'))
   check('the pinned group is first', (() => {
@@ -300,6 +330,7 @@ if (mountError === null) {
     await click(projectRow)
     check('clicking a project row posts to the mutate route', calls.some(call => call.method === 'POST'
       && call.path === '/api/workspace-groups/mutate'
+      && call.search === '?scope=local'
       && JSON.parse(call.body).action === 'setWorkspaceState'))
     check('the posted payload names the project', (() => {
       const post = calls.find(call => call.method === 'POST'
@@ -714,7 +745,23 @@ const DOC_C = {
 let documentC = structuredClone(DOC_C)
 const callsC = []
 globalThis.fetch = async (path, init) => {
-  callsC.push({ path, method: init?.method ?? 'GET', body: init?.body })
+  const url = typeof path === 'string' ? path : String(path)
+  const cut = url.indexOf('?')
+  const bare = cut === -1 ? url : url.slice(0, cut)
+  const search = cut === -1 ? '' : url.slice(cut)
+  callsC.push({ path: bare, search, method: init?.method ?? 'GET', body: init?.body })
+  if (bare === '/ds-harness-remote/status') {
+    const request = JSON.parse(init.body)
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: request.rpcId,
+        result: { ok: true, value: { mode: 'local', connected: false } },
+      }),
+    }
+  }
   if (init?.body !== undefined) {
     const request = JSON.parse(init.body)
     // Mirror the one mutation this section exercises, so the tree can show the
@@ -724,7 +771,12 @@ globalThis.fetch = async (path, init) => {
       documentC.assign[request.payload.workspaceId] = request.payload.groupId
     }
   }
-  return { ok: true, status: 200, json: async () => documentC }
+  const scope = new URLSearchParams(search).get('scope')
+  return {
+    ok: true,
+    status: 200,
+    json: async () => (scope === null ? documentC : { ...documentC, scope }),
+  }
 }
 
 const registrations3 = []
@@ -874,6 +926,108 @@ if (mountDError === null) {
     containerD.querySelector('[data-dwg-group="u:__ungrouped__"]') === null)
   await act(async () => { rootD.unmount() })
   check('the empty mount unmounts cleanly', containerD.innerHTML === '')
+}
+
+// ── remote mode: another Host's groups, labelled as such ─────────────
+// The user's report was that connecting to a Remote Host kept showing the
+// LOCAL grouping beside the REMOTE project list, which is worse than no
+// grouping at all: the groups are named after projects that are not on
+// screen. This section proves the two halves of the fix — the page asks for
+// the Remote Host's document and says whose it is.
+console.log('▸ mounting while connected to a Remote Host')
+const REMOTE_DEVICE = '3f1c8a90-77bd-4a2e-9d31-1b0c5e7a2f48'
+const REMOTE_NAME = '书房台式机'
+const DOC_REMOTE = {
+  version: 1,
+  groups: [{ id: 'g1', name: '远端项目', color: 'teal', icon: 'flask', pinned: false, collapsed: false, order: 0, createdAt: 1 }],
+  archivedGroups: [],
+  assign: { w2: 'g1' },
+  orders: { g1: ['w2'] },
+  workspaceState: {},
+  ui: { view: 'grouped' },
+  settings: { previewSessions: 2, searchLimit: 80 },
+  scope: REMOTE_DEVICE,
+  persisted: true, error: null, file: 'C:/fake/state-remote.json',
+}
+const callsE = []
+globalThis.fetch = async (path, init) => {
+  const url = typeof path === 'string' ? path : String(path)
+  const cut = url.indexOf('?')
+  const bare = cut === -1 ? url : url.slice(0, cut)
+  const search = cut === -1 ? '' : url.slice(cut)
+  callsE.push({ path: bare, search, method: init?.method ?? 'GET', body: init?.body })
+  if (bare === '/ds-harness-remote/status') {
+    const request = JSON.parse(init.body)
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: request.rpcId,
+        result: { ok: true, value: { mode: 'remote', connected: true, target: { deviceId: REMOTE_DEVICE, name: REMOTE_NAME } } },
+      }),
+    }
+  }
+  const scope = new URLSearchParams(search).get('scope')
+  // A Host only serves its remote document for the matching scope; anything
+  // else gets the local one, exactly like the real route.
+  const document = scope === REMOTE_DEVICE ? DOC_REMOTE : { ...DOCUMENT, scope: scope ?? 'local' }
+  return { ok: true, status: 200, json: async () => document }
+}
+const registrationsE = []
+const fakeCtxE = {
+  ...fakeCtx,
+  locale: { register(ns, table) { localeTable = table }, bind: fakeCtx.locale.bind },
+  slots: {
+    currentKey: null,
+    inject(key, callback) {
+      const previous = this.currentKey
+      this.currentKey = key
+      try { callback() } finally { this.currentKey = previous }
+      return () => {}
+    },
+    register(options, component) { registrationsE.push({ options, component }); return () => {} },
+  },
+}
+plugin.apply(fakeCtxE)
+const injectFaceE = registrationsE[0].options.inject()
+const containerE = document.createElement('div')
+document.body.appendChild(containerE)
+const rootE = ReactDOMClient.createRoot(containerE)
+let mountEError = null
+try {
+  await act(async () => {
+    rootE.render(React.createElement(registrationsE[0].component, { ...props, ...injectFaceE }))
+  })
+} catch (error) {
+  mountEError = error
+}
+check('the remote fixture mounts', mountEError === null, mountEError?.message)
+if (mountEError === null) {
+  check('the remote read names the Remote Host, not the local one', callsE.some(call => call.method === 'GET'
+    && call.path === '/api/workspace-groups/state' && call.search === `?scope=${REMOTE_DEVICE}`),
+    callsE.map(call => `${call.method} ${call.path}${call.search}`).join(' | '))
+  check('the tree painted the Remote Host\'s groups, not the local ones',
+    containerE.innerHTML.includes('远端项目') && !containerE.innerHTML.includes('学习'))
+  check('the header says which Host the groups belong to',
+    containerE.querySelector('.dwg-scopeRow') !== null
+    && containerE.innerHTML.includes(REMOTE_NAME),
+    containerE.querySelector('.dwg-scopeRow')?.textContent ?? 'no scope row')
+  check('the scope line is not a control',
+    containerE.querySelector('.dwg-scopeRow button') === null)
+  const groupRowE = containerE.querySelector('[data-dwg-group="g1"]')
+  check('the Remote Host\'s group is addressable', groupRowE !== null)
+  if (groupRowE !== null) {
+    await click(groupRowE)
+    const folded = callsE.filter(call => call.method === 'POST'
+      && call.path === '/api/workspace-groups/mutate').at(-1)
+    check('a fold on a remote document is written to the remote scope', folded !== undefined
+      && folded.search === `?scope=${REMOTE_DEVICE}`
+      && JSON.parse(folded.body).action === 'updateGroup',
+      folded === undefined ? 'no mutate posted' : `${folded.search} ${folded.body}`)
+  }
+  await act(async () => { rootE.unmount() })
+  check('the remote mount unmounts cleanly', containerE.innerHTML === '')
 }
 globalThis.fetch = realFetch
 

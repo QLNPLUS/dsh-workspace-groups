@@ -22,5 +22,7 @@
         searchLimit: 80
         # Pre-create these groups on first run (id, name, color, icon). An
         # operator can rename, recolor or delete them afterwards; the ids stay
-        # stable so an empty list here simply seeds nothing.
+        # stable so an empty list here simply seeds nothing. Seeds apply to the
+        # LOCAL scope only — a Remote Host you connect to starts with its own
+        # (empty) document instead of inheriting these.
         seedGroups: []

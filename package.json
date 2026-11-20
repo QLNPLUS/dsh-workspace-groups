@@ -1,6 +1,6 @@
 {
   "name": "dsh-workspace-groups",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Group the DSH sidebar workspaces into named, colored, collapsible folders: drag projects between groups, pin and archive groups, search across group/project/conversation names, and keep every fold state across restarts.",

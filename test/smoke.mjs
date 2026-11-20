@@ -177,9 +177,40 @@ const HOST_DOCUMENT = {
 }
 
 const requests = []
+/**
+ * The fake Host.
+ *
+ * It answers three routes, and the third is the point: the bundle probes
+ * `ds-harness-remote/status` before its first read, so this stand-in has to
+ * speak that route's envelope or the probe would be indistinguishable from a
+ * broken server. `SCOPE_STATUS` is what the probe finds; the tests flip it to
+ * exercise remote mode.
+ *
+ * The document routes echo the `?scope=` they were given, exactly as the real
+ * Host does — the page trusts the Host's echo, not its own probe, so a
+ * stand-in that stayed silent about it could not exercise that rule.
+ */
+const SCOPE_STATUS = { mode: 'local' }
 globalThis.fetch = async (path, init) => {
-  requests.push({ path, method: init?.method ?? 'GET', body: init?.body })
-  return { ok: true, status: 200, json: async () => HOST_DOCUMENT }
+  const url = typeof path === 'string' ? path : String(path)
+  const cut = url.indexOf('?')
+  const bare = cut === -1 ? url : url.slice(0, cut)
+  const search = cut === -1 ? '' : url.slice(cut)
+  requests.push({ path: bare, search, method: init?.method ?? 'GET', body: init?.body })
+  if (bare === '/ds-harness-remote/status') {
+    const request = JSON.parse(init.body)
+    const value = SCOPE_STATUS.mode === 'remote'
+      ? { mode: 'remote', connected: true, target: { deviceId: SCOPE_STATUS.deviceId, name: SCOPE_STATUS.name } }
+      : { mode: 'local', connected: false }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value } }),
+    }
+  }
+  const echoed = new URLSearchParams(search).get('scope')
+  const document = echoed === null ? HOST_DOCUMENT : { ...HOST_DOCUMENT, scope: echoed }
+  return { ok: true, status: 200, json: async () => document }
 }
 
 let loaded = null
@@ -411,17 +442,67 @@ const snapshotBefore = injectedFace.data.source.getSnapshot()
 check('the pre-read document is empty but well formed', snapshotBefore.groups.length === 0
   && snapshotBefore.settings.previewSessions === 2 && snapshotBefore.ui.view === 'grouped')
 await injectedFace.data.start()
-check('a read was issued to the state route', requests.some(request => request.method === 'GET' && request.path === '/api/workspace-groups/state'))
+check('the probe asked the remote plugin for the current Host',
+  requests.some(request => request.method === 'POST' && request.path === '/ds-harness-remote/status'))
+check('a read was issued to the state route', requests.some(request => request.method === 'GET'
+  && request.path === '/api/workspace-groups/state'
+  && request.search === '?scope=local'))
 const snapshotAfter = injectedFace.data.source.getSnapshot()
 check('the answered document is normalized and published', snapshotAfter.groups.length === 3
   && snapshotAfter.archivedGroups.length === 1 && snapshotAfter.file === 'C:/fake/state.json',
   `groups=${snapshotAfter.groups.length} archived=${snapshotAfter.archivedGroups.length}`)
 check('settings are clamped into range', snapshotAfter.settings.searchLimit === 80)
+check('a local page names the local scope', snapshotAfter.scope === 'local' && snapshotAfter.scopeMode === 'local',
+  `${snapshotAfter.scope}/${snapshotAfter.scopeMode}`)
 
 await injectedFace.data.mutate('createGroup', { name: '新组', color: 'violet', icon: 'star' })
 check('a mutation goes to the mutate route with an action body', requests.some(request => request.method === 'POST'
   && request.path === '/api/workspace-groups/mutate'
+  && request.search === '?scope=local'
   && JSON.parse(request.body).action === 'createGroup'))
+
+// ── remote mode: the same document routes, a different scope ─────────────
+SCOPE_STATUS.mode = 'remote'
+SCOPE_STATUS.deviceId = '3f1c8a90-77bd-4a2e-9d31-1b0c5e7a2f48'
+SCOPE_STATUS.name = '书房台式机'
+const remoteBefore = requests.length
+await injectedFace.data.start()
+check('a retry re-probes the Host', requests.slice(remoteBefore)
+  .some(request => request.method === 'POST' && request.path === '/ds-harness-remote/status'))
+check('the remote scope is the target device id', injectedFace.data.source.getSnapshot().scope === SCOPE_STATUS.deviceId
+  && injectedFace.data.source.getSnapshot().scopeMode === 'remote',
+  JSON.stringify(injectedFace.data.source.getSnapshot().scope))
+check('the remote read names that device id', requests.slice(remoteBefore)
+  .some(request => request.method === 'GET' && request.search === `?scope=${SCOPE_STATUS.deviceId}`),
+  requests.slice(remoteBefore).map(request => `${request.method} ${request.path}${request.search}`).join(' | '))
+check('the remote label is the Host name it published',
+  injectedFace.data.source.getSnapshot().scopeLabel === '书房台式机',
+  injectedFace.data.source.getSnapshot().scopeLabel)
+await injectedFace.data.mutate('createGroup', { name: '远端组', color: 'teal', icon: 'flask' })
+check('a remote mutation carries the remote scope', requests.slice(remoteBefore)
+  .some(request => request.method === 'POST' && request.path === '/api/workspace-groups/mutate'
+    && request.search === `?scope=${SCOPE_STATUS.deviceId}`))
+
+// A Host that does not echo the scope (an older build) must win over the probe:
+// trusting the probe would label local groups as a Remote Host's.
+SCOPE_STATUS.mode = 'remote'
+const echoingFetch = globalThis.fetch
+const originalFetch = globalThis.fetch
+globalThis.fetch = async (path, init) => {
+  const response = await originalFetch(path, init)
+  const url = typeof path === 'string' ? path : String(path)
+  if (url.startsWith('/api/workspace-groups/')) {
+    const body = await response.json()
+    return { ...response, json: async () => ({ ...body, scope: 'local' }) }
+  }
+  return response
+}
+await injectedFace.data.start()
+check('a Host answer without the asked scope falls back to local mode',
+  injectedFace.data.source.getSnapshot().scope === 'local'
+  && injectedFace.data.source.getSnapshot().scopeMode === 'local',
+  `${injectedFace.data.source.getSnapshot().scope}/${injectedFace.data.source.getSnapshot().scopeMode}`)
+globalThis.fetch = echoingFetch
 
 // Writes must be serialized: a drag landing during a rename cannot overtake it.
 const order = []

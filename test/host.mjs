@@ -61,10 +61,15 @@ const mount = (home, config = { enabled: true, previewSessions: 2, searchLimit: 
     },
   }
   mod.apply(ctx, config)
-  /** Call one route the way the browser half does. */
-  const call = async (path, body) => {
+  /**
+   * Call one route the way the browser half does.
+   *
+   * `query` is the raw query string the browser appends (it names the document
+   * scope), e.g. `?scope=local` or `?scope=<deviceId>`.
+   */
+  const call = async (path, body, query = '') => {
     const route = routes.get(path)
-    const request = new Request(`http://dsh.test${path}`, {
+    const request = new Request(`http://dsh.test${path}${query}`, {
       method: route.methods[0],
       body: body === undefined ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
       headers: { 'content-type': 'application/json' },
@@ -104,6 +109,7 @@ check('the answer is not cacheable', state.headers.get('cache-control') === 'no-
 check('the document names its own file', typeof state.payload.file === 'string'
   && state.payload.file.endsWith('state.json'), state.payload.file)
 check('a fresh home has no errors', state.payload.error === null, String(state.payload.error))
+check('an unscoped read is the local document', state.payload.scope === 'local', String(state.payload.scope))
 
 // ═══════════════════════════════════════════════════════════════════════
 // Groups
@@ -392,6 +398,75 @@ check('an unknown action is a no-op answered with the document', unknown.status 
   && Array.isArray(unknown.payload.groups), String(unknown.status))
 
 // ═══════════════════════════════════════════════════════════════════════
+// Scopes: one document per visible workspace list
+// ═══════════════════════════════════════════════════════════════════════
+//
+// A page connected to a Remote Host shows that Host's workspaces, so the
+// grouping document it renders must describe those ids, not the local ones.
+// The Host half keeps one document per scope; this section proves the split is
+// real (separate files, no bleed either way) and that the scope cannot be used
+// to reach outside the state directory.
+
+console.log('▸ scopes')
+const scopedHome = freshHome()
+const scoped = mount(scopedHome)
+const DEVICE = '3f1c8a90-77bd-4a2e-9d31-1b0c5e7a2f48'
+await scoped.call(mod.MUTATE_PATH, { action: 'createGroup', payload: { name: '本机组', color: 'blue', icon: 'code' } }, '?scope=local')
+const localDoc = (await scoped.call(mod.STATE_PATH, undefined, '?scope=local')).payload
+check('the local scope keeps the group it was given', localDoc.groups.length === 1 && localDoc.scope === 'local',
+  JSON.stringify({ scope: localDoc.scope, groups: localDoc.groups.length }))
+const remoteDocBefore = (await scoped.call(mod.STATE_PATH, undefined, `?scope=${DEVICE}`)).payload
+check('a Remote scope starts empty', remoteDocBefore.groups.length === 0
+  && remoteDocBefore.scope === DEVICE, JSON.stringify({ scope: remoteDocBefore.scope, groups: remoteDocBefore.groups.length }))
+check('a Remote scope writes its own file',
+  typeof remoteDocBefore.file === 'string' && remoteDocBefore.file.endsWith(`state.${DEVICE}.json`),
+  String(remoteDocBefore.file))
+const remoteGroup = await scoped.call(mod.MUTATE_PATH,
+  { action: 'createGroup', payload: { name: '远端组', color: 'teal', icon: 'flask' } }, `?scope=${DEVICE}`)
+check('a Remote mutation lands in the Remote document', remoteGroup.payload.groups.length === 1
+  && remoteGroup.payload.scope === DEVICE)
+const localAfter = (await scoped.call(mod.STATE_PATH, undefined, '?scope=local')).payload
+check('the local document did not see the Remote write', localAfter.groups.length === 1
+  && localAfter.groups[0].name === '本机组', JSON.stringify(localAfter.groups.map(group => group.name)))
+check('the two scopes are two files on disk',
+  existsSync(localAfter.file) && existsSync(remoteGroup.payload.file)
+  && localAfter.file !== remoteGroup.payload.file, `${localAfter.file} vs ${remoteGroup.payload.file}`)
+let remoteOnDisk = null
+try {
+  remoteOnDisk = JSON.parse(readFileSync(remoteGroup.payload.file, 'utf8'))
+} catch (error) {
+  check('the Remote state file is readable JSON', false, error.message)
+}
+check('the Remote state file holds only the Remote group', remoteOnDisk !== null
+  && Array.isArray(remoteOnDisk.groups) && remoteOnDisk.groups.length === 1
+  && remoteOnDisk.groups[0].name === '远端组', JSON.stringify(remoteOnDisk?.groups?.map(group => group.name)))
+
+// A malformed scope must not become a path, and must not fail the request: the
+// browser can be old, and a page whose id was refused still needs a tree.
+for (const hostile of ['../escape', 'a/b', '..', 'C:', 'a b', '']) {
+  const answer = await scoped.call(mod.STATE_PATH, undefined, `?scope=${encodeURIComponent(hostile)}`)
+  check(`a refused scope ${JSON.stringify(hostile)} falls back to the local document`,
+    answer.status === 200 && answer.payload.scope === 'local', `${answer.status} ${String(answer.payload.scope)}`)
+}
+
+// The store cache is bounded, so a page that invents scope keys cannot grow the
+// process without limit; an over-limit scope still answers (it just is not
+// cached), and the scopes that matter keep their content.
+for (let index = 0; index < 40; index += 1) {
+  const device = `device-${String(index).padStart(2, '0')}-a1b2c3d4`
+  const answer = await scoped.call(mod.STATE_PATH, undefined, `?scope=${device}`)
+  if (answer.status !== 200 || answer.payload.scope !== device) {
+    check(`overflowing the store cache still answers (scope ${device})`, false, String(answer.status))
+  }
+}
+const afterOverflow = (await scoped.call(mod.STATE_PATH, undefined, '?scope=local')).payload
+check('the local document survives a flood of Remote scopes', afterOverflow.groups.length === 1
+  && afterOverflow.groups[0].name === '本机组', JSON.stringify(afterOverflow.groups.map(group => group.name)))
+const overflowed = (await scoped.call(mod.STATE_PATH, undefined, '?scope=device-39-a1b2c3d4')).payload
+check('a scope past the cache bound still reads its own document', overflowed.scope === 'device-39-a1b2c3d4',
+  String(overflowed.scope))
+
+// ═══════════════════════════════════════════════════════════════════════
 // Seeding and the disabled row
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -409,6 +484,13 @@ check('a seed entry without a name is still normalized', seededState.payload.gro
   && seededState.payload.groups.find(group => group.id === 'bad').name === '')
 check('config preview count reaches settings', seededState.payload.settings.previewSessions === 1)
 check('config search limit reaches settings', seededState.payload.settings.searchLimit === 20)
+// Seeds are an operator convenience for THIS installation's sidebar. Planting
+// them into every Remote Host the user connects to would be noise nobody asked
+// for, so a Remote scope must start empty even when the row was seeded.
+const seededRemote = (await seeded.call(mod.STATE_PATH, undefined, '?scope=3f1c8a90-77bd-4a2e-9d31-1b0c5e7a2f48')).payload
+check('seedGroups does not leak into a Remote scope', seededRemote.groups.length === 0
+  && seededRemote.scope === '3f1c8a90-77bd-4a2e-9d31-1b0c5e7a2f48',
+  JSON.stringify({ scope: seededRemote.scope, groups: seededRemote.groups.map(group => group.id) }))
 
 console.log('▸ a disabled row')
 const disabledHome = freshHome()

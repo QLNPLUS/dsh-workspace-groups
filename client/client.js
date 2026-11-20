@@ -68,6 +68,57 @@ window.__ModuleLoader__.load({
     const STATE_PATH = '/api/workspace-groups/state'
     /** Apply one mutation; the answer is the new complete document. */
     const MUTATE_PATH = '/api/workspace-groups/mutate'
+    /**
+     * The query parameter naming which document the request is about.
+     *
+     * Grouping is keyed by the workspace list the page is showing, and a page
+     * connected to a Remote Host shows that Host's list. This plugin's routes
+     * live on the LOCAL Host, which cannot serve the Remote document directly
+     * (`ds-harness-remote` hard-gates its plugin-route forwarder to its own
+     * allowlist), so it keeps one document per scope instead and the page names
+     * the scope on every request. That is why the remote case is a query
+     * string, not a different transport.
+     */
+    const SCOPE_QUERY = 'scope'
+    /** Scope key for this installation's own workspace list. */
+    const LOCAL_SCOPE = 'local'
+    /**
+     * The ds-harness-remote status control route.
+     *
+     * Read-only, and it is the only supported way for another plugin to learn
+     * whether this page is currently showing a Remote Host's workspaces. The
+     * route answers the same envelope the remote client itself posts:
+     * `{type:'client-request', rpcId, method, payload}` → `{type:'server-response',
+     * rpcId, result:{ok, value}}`. Its `value.mode` is `'local'` or `'remote'`,
+     * `value.target.deviceId` names the Host, and `value.target.name` is the
+     * label that Host published for itself.
+     *
+     * Written root-absolute on purpose. The remote plugin's own client posts the
+     * document-relative form (`ds-harness-remote/status`) because the channel is
+     * mounted at the web server's root; at this page's base the two resolve to
+     * the same URL, and the absolute form cannot be moved out from under us by
+     * an unexpected `<base>`.
+     */
+    const REMOTE_STATUS_ENDPOINT = '/ds-harness-remote/status'
+    /**
+     * How long the scope probe may take before the page assumes local mode.
+     *
+     * The probe runs on mount, in front of the first read, so this is a ceiling
+     * on how long the tree can sit on its loading placeholder because of it. A
+     * local loopback round trip answers in single-digit milliseconds; the
+     * timeout only matters when the remote plugin is absent or wedged.
+     */
+    const SCOPE_PROBE_TIMEOUT_MS = 1500
+    /**
+     * Accepted scope keys, mirroring the Host half's pattern.
+     *
+     * A device id is the scope for a Remote Host. The check is deliberately the
+     * same shape on both sides: a key that reaches a filesystem path on the Host
+     * must not contain a separator, a dot segment or a drive colon, and a page
+     * that receives an unusable id has to fall back to `local` rather than send
+     * it.
+     */
+    const SCOPE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
     /** Locale namespace this bundle owns. */
     const NS = 'workspaceGroups'
     /** Assignment/order key for "no group"; mirrors the Host half's literal. */
@@ -151,6 +202,8 @@ window.__ModuleLoader__.load({
       'empty.group': '拖项目到这里',
       'empty.ungrouped': '把项目拖到这里即可移出分组',
       'tree.empty': '还没有项目和分组，用右上角的按钮新建。',
+      'scope.remote': '远端主机 · {name}',
+      'scope.remoteHint': '这些分组属于远端主机「{name}」，与本机的分组各自独立保存。',
       'badge.pending': '{n} 待处理',
       'badge.running': '{n} 运行中',
       'badge.unread': '{n} 新完成',
@@ -265,6 +318,8 @@ window.__ModuleLoader__.load({
       'empty.group': 'Drag projects here',
       'empty.ungrouped': 'Drop a project here to leave its group',
       'tree.empty': 'No projects or groups yet. Use the controls at the top right.',
+      'scope.remote': 'Remote host · {name}',
+      'scope.remoteHint': 'These groups belong to the remote host “{name}” and are stored separately from this machine’s.',
       'badge.pending': '{n} waiting',
       'badge.running': '{n} running',
       'badge.unread': '{n} finished',
@@ -434,6 +489,16 @@ window.__ModuleLoader__.load({
        * page could not ask, the other means the Host answered with trouble.
        */
       readError: null,
+      /**
+       * Which workspace list this document describes: `local` or a Remote
+       * Host's device id. The Host echoes the scope it actually served, so a
+       * key it refused shows up here as `local` and the page can say so.
+       */
+      scope: 'local',
+      /** The Remote Host's published name; empty in local mode. */
+      scopeLabel: '',
+      /** `local` or `remote`; mirrors what the probe found. */
+      scopeMode: 'local',
       persisted: true,
       error: null,
       file: '',
@@ -456,6 +521,14 @@ window.__ModuleLoader__.load({
           searchLimit: num(out.settings.searchLimit, 80, 20, 400),
         }
         : { previewSessions: 2, searchLimit: 80 }
+      /**
+       * The scope the HOST actually served, which is what the page must trust:
+       * it names the scope on every request, but a key the Host refuses
+       * (malformed, or an older Host that does not know the field) comes back
+       * as `local`. A page that believed its own probe instead would label
+       * local groups as a Remote Host's.
+       */
+      out.scope = typeof out.scope === 'string' && SCOPE_PATTERN.test(out.scope) ? out.scope : LOCAL_SCOPE
       // Anything that reached this function came out of a Host answer, so the
       // document is authoritative from here on and the page-level read failure
       // (if there was one) is over.
@@ -465,18 +538,138 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Shorten a device id the way `ds-harness-remote` shows it when a Host
+     * published no name of its own: `abcdef12…3456`.
+     * @param deviceId - the scope key.
+     */
+    const shortenDeviceId = deviceId => (typeof deviceId === 'string' && deviceId.length > 12
+      ? `${deviceId.slice(0, 8)}…${deviceId.slice(-4)}`
+      : String(deviceId ?? ''))
+
+    /**
+     * An abort signal that fires after `ms`, or `undefined` when the shell's
+     * browser lacks `AbortSignal.timeout` (Chromium 103+).
+     *
+     * The probe must not become a hard requirement on that API: without it the
+     * request still runs, it simply has no client-side deadline, and a wedged
+     * route would then delay the first read by one transport timeout instead of
+     * `SCOPE_PROBE_TIMEOUT_MS`. Degrading that way beats a browser for which
+     * remote mode silently never turns on.
+     *
+     * @param ms - deadline in milliseconds.
+     */
+    const timeoutSignal = (ms) => {
+      try {
+        return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(ms)
+          : undefined
+      } catch {
+        return undefined
+      }
+    }
+
+    /**
      * The grouping document handle for the page.
      *
      * Mutations are not optimistic: the Host answers with the complete
      * normalized document, and publishing that answer is both the render update
      * and the failure report. Writes run one at a time, so a drag that lands
      * while a rename is in flight cannot resolve out of order.
+     *
+     * SCOPE. The document this store holds describes the workspace list the
+     * section is showing. That list is this Host's own on a local page and the
+     * Remote Host's on a remote one, so the store probes which it is before the
+     * first read and names that scope on every request. The grouping itself
+     * still lives on the LOCAL Host (a third-party plugin cannot reach a Remote
+     * Host's routes — `ds-harness-remote` gates its route forwarder to an
+     * allowlist); the LOCAL Host simply keeps one document per scope. What the
+     * user gets is the thing they asked for: switching to a Remote Host shows
+     * that Host's groups instead of the local ones, and each Host's arrangement
+     * survives a switch back.
      */
     const createGroupsStore = (log) => {
       const store = createSnapshotStore(emptyDocument())
       let reading = null
       let chain = Promise.resolve()
       let failure = null
+      /** What the last probe established; replaced only by a later probe. */
+      let scopeState = { key: LOCAL_SCOPE, label: '', mode: 'local' }
+      let probing = null
+
+      /** Ask ds-harness-remote which Host's workspaces this page is showing. */
+      const probe = async () => {
+        const rpcId = `workspace-groups-scope-${Date.now()}`
+        try {
+          const deadline = timeoutSignal(SCOPE_PROBE_TIMEOUT_MS)
+          const response = await fetch(REMOTE_STATUS_ENDPOINT, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { accept: 'application/json', 'content-type': 'application/json' },
+            body: JSON.stringify({ type: 'client-request', rpcId, method: 'status', payload: {} }),
+            ...(deadline === undefined ? {} : { signal: deadline }),
+          })
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const envelope = await response.json()
+          const result = envelope?.result
+          if (envelope?.rpcId !== rpcId || result?.ok !== true) throw new Error('bad envelope')
+          const value = result.value
+          if (value === null || typeof value !== 'object') throw new Error('bad status')
+          const deviceId = value.target?.deviceId
+          if (value.mode !== 'remote' || typeof deviceId !== 'string' || !SCOPE_PATTERN.test(deviceId)) {
+            return { key: LOCAL_SCOPE, label: '', mode: 'local' }
+          }
+          const rawName = value.target?.name
+          return {
+            key: deviceId,
+            // A Remote Host may not have published a name; the id is then the
+            // only honest label, shortened the way the remote client shows it.
+            label: typeof rawName === 'string' && rawName.trim().length > 0
+              ? rawName.trim()
+              : shortenDeviceId(deviceId),
+            mode: 'remote',
+          }
+        } catch (error) {
+          // Absent plugin, absent route, or a route that refused this page: the
+          // local document is the correct answer in every one of those cases.
+          log.debug('remote scope probe fell back to local', error)
+          return { key: LOCAL_SCOPE, label: '', mode: 'local' }
+        }
+      }
+
+      /** Probe once per page unless a caller explicitly re-asks. */
+      const ensureScope = () => {
+        if (probing !== null) return probing
+        probing = probe().then((next) => {
+          const changed = next.key !== scopeState.key
+          scopeState = next
+          const current = store.source.getSnapshot()
+          return changed ? { ...current, loaded: false } : null
+        })
+        return probing
+      }
+
+      /** The query string naming the current scope. */
+      const query = () => `?${SCOPE_QUERY}=${encodeURIComponent(scopeState.key)}`
+
+      /**
+       * Publish a Host answer, reconciling the scope the page asked for with
+       * the scope the Host says it served.
+       *
+       * A Host that refuses the key — because the id is malformed, or because
+       * it predates the field — answers `scope: 'local'`. The page then has to
+       * STOP calling itself remote: otherwise it would keep naming a scope the
+       * Host ignores and label local groups as a Remote Host's. Trusting the
+       * Host's answer is what makes an old Host degrade to local mode instead
+       * of silently mislabelling.
+       *
+       * @param answer - a document already run through `normalizeDocument`.
+       */
+      const publish = (answer) => {
+        if (answer.scope !== scopeState.key) {
+          scopeState = { key: LOCAL_SCOPE, label: '', mode: 'local' }
+        }
+        store.set({ ...answer, scopeLabel: scopeState.label, scopeMode: scopeState.mode })
+      }
 
       /**
        * Read the grouping document.
@@ -488,14 +681,16 @@ window.__ModuleLoader__.load({
        * retry the user can press.
        */
       const read = async () => {
+        const stale = await ensureScope()
+        if (stale !== null) store.set(stale)
         try {
-          const response = await fetch(STATE_PATH, {
+          const response = await fetch(`${STATE_PATH}${query()}`, {
             method: 'GET',
             credentials: 'same-origin',
             headers: { accept: 'application/json' },
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          store.set(normalizeDocument(await response.json()))
+          publish(normalizeDocument(await response.json()))
           failure = null
         } catch (error) {
           failure = reasonText(error)
@@ -507,14 +702,20 @@ window.__ModuleLoader__.load({
 
       const mutate = (action, payload) => {
         const send = async () => {
-          const response = await fetch(MUTATE_PATH, {
+          // A control can be pressed while the tree is still loading (the header
+          // buttons never disable), so a mutation must establish the scope too:
+          // writing to the local document while the page is about to become a
+          // Remote Host's would put the change where the user cannot see it.
+          const stale = await ensureScope()
+          if (stale !== null) store.set(stale)
+          const response = await fetch(`${MUTATE_PATH}${query()}`, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { accept: 'application/json', 'content-type': 'application/json' },
             body: JSON.stringify({ action, payload: payload ?? {} }),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          store.set(normalizeDocument(await response.json()))
+          publish(normalizeDocument(await response.json()))
           return store.source.getSnapshot()
         }
         const result = chain.then(send, send)
@@ -526,6 +727,9 @@ window.__ModuleLoader__.load({
         source: store.source,
         start() {
           if (reading !== null) return reading
+          // A retry re-probes: the previous attempt may have failed precisely
+          // because the scope could not be established yet.
+          probing = null
           reading = read().then(() => { reading = null }, () => { reading = null })
           return reading
         },
@@ -1648,6 +1852,14 @@ window.__ModuleLoader__.load({
 
       const document = useSnapshot(injected.data.source)
       const notice = useSnapshot(injected.notice)
+      /**
+       * The Host this tree describes, read off the document rather than off the
+       * probe: the probe asks, the Host answer decides. `scopeMode` is
+       * `remote` only while the document the page holds was served for a Remote
+       * Host's id.
+       */
+      const scopeMode = document.scopeMode === 'remote' ? 'remote' : 'local'
+      const scopeLabel = document.scopeLabel === undefined ? '' : document.scopeLabel
 
       const workspaces = useWorkspaces(state => state.items)
       const archivedIds = useWorkspaces(state => state.archivedSessionIds)
@@ -2343,6 +2555,21 @@ window.__ModuleLoader__.load({
             }),
           )
           : null,
+        /**
+         * Which Host this tree belongs to.
+         *
+         * Only a Remote connection grows this line: on a local page the tree is
+         * obviously this machine's, and a permanent "local host" label would be
+         * noise. In remote mode it is the opposite — the sidebar shows a
+         * different machine's projects, and the groups beside them are a
+         * different set, so the one thing that could confuse the user is not
+         * knowing that. It sits under the header, dim and one line, and never
+         * becomes a control.
+         */
+        scopeMode === 'remote'
+          ? h('div', { className: 'dwg-scopeRow', title: t('scope.remoteHint', { name: scopeLabel }) },
+            h('span', { className: 'dwg-scopeLabel' }, t('scope.remote', { name: scopeLabel })))
+          : null,
         notice === null ? null : h('div', { className: 'dwg-notice', role: 'status' }, notice),
         h(
           'div',
@@ -2390,6 +2617,10 @@ window.__ModuleLoader__.load({
 .dwg-iconBtn.dwg-railBtn{width:36px;height:36px;border-radius:var(--dsw-radius-md);color:var(--dsw-alias-label-primary)}
 .dwg-railBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .dwg-headerTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-secondary)}
+/* One dim line naming the Remote Host this tree belongs to. It is not a
+   control and must not compete with the tree: no icon, no border, no hover. */
+.dwg-scopeRow{display:flex;align-items:center;gap:6px;padding:0 8px 6px;flex:0 0 auto;min-width:0}
+.dwg-scopeLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:15px;color:var(--dsw-alias-label-tertiary)}
 .dwg-headerActions{display:flex;align-items:center;gap:2px;flex:0 0 auto}
 .dwg-iconBtn.dwg-iconBtnHeader{width:24px;height:24px;border-radius:6px}
 .dwg-iconBtnOn{color:var(--dsw-alias-state-business-primary)}

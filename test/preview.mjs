@@ -15,6 +15,9 @@
  *   node test/preview.mjs --filed          → every project filed into a group,
  *                                            so the Ungrouped strip must vanish
  *   node test/preview.mjs --blank          → no projects, no groups at all
+ *   node test/preview.mjs --remote         → the page is connected to a Remote
+ *                                            Host, so the tree carries the
+ *                                            "which Host this belongs to" line
  *
  * The fake parts are only the DSH context and the fixture document — the same
  * seams test/mount.mjs uses. Nothing about the plugin itself is simulated.
@@ -58,7 +61,11 @@ const variant = process.argv.includes('--all-groups')
 const allPinned = process.argv.includes('--all-pinned')
 const filed = process.argv.includes('--filed')
 const blank = process.argv.includes('--blank')
-const suffix = `${dark ? '-dark' : ''}${variant ? '-flat' : ''}${allPinned ? '-pinned' : ''}${filed ? '-filed' : ''}${blank ? '-blank' : ''}`
+const remote = process.argv.includes('--remote')
+const suffix = `${dark ? '-dark' : ''}${variant ? '-flat' : ''}${allPinned ? '-pinned' : ''}${filed ? '-filed' : ''}${blank ? '-blank' : ''}${remote ? '-remote' : ''}`
+/** The Remote Host the `--remote` variant pretends to be connected to. */
+const PREVIEW_DEVICE = '3f1c8a90-77bd-4a2e-9d31-1b0c5e7a2f48'
+const PREVIEW_DEVICE_NAME = '书房台式机'
 
 /** The theme's own values, copied from dsh-client-ui-theme design-platform.css. */
 const LIGHT = `
@@ -166,7 +173,26 @@ globalThis.window = jsdomWindow
 globalThis.document = jsdomWindow.document
 globalThis.HTMLElement = jsdomWindow.HTMLElement
 globalThis.Node = jsdomWindow.Node
-globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => structuredClone(DOCUMENT) })
+globalThis.fetch = async (path, init) => {
+  const url = typeof path === 'string' ? path : String(path)
+  if (url.startsWith('/ds-harness-remote/status')) {
+    const request = JSON.parse(init.body)
+    const value = remote
+      ? { mode: 'remote', connected: true, target: { deviceId: PREVIEW_DEVICE, name: PREVIEW_DEVICE_NAME } }
+      : { mode: 'local', connected: false }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value } }),
+    }
+  }
+  // Echo the scope like the real Host: the page trusts the answer, not its probe.
+  const scope = new URLSearchParams(url.slice(url.indexOf('?'))).get('scope')
+  const document = scope === null || scope === 'local'
+    ? DOCUMENT
+    : { ...DOCUMENT, scope }
+  return { ok: true, status: 200, json: async () => structuredClone(document) }
+}
 
 // ── load the bundle the way the browser does ───────────────────────────
 let loaded = null

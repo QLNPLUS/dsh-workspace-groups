@@ -80,7 +80,7 @@ inject: () => ({ injected }),      // ✓ 平铺成一个名为 injected 的 pro
 
 ## 3. 状态怎么存
 
-`<DSH_HOME>/workspace-groups/state.json`，一个 JSON 文档：
+`<DSH_HOME>/workspace-groups/state.json`（本机作用域），一个 JSON 文档：
 
 ```json
 {
@@ -103,18 +103,50 @@ inject: () => ({ injected }),      // ✓ 平铺成一个名为 injected 的 pro
 - **不做乐观更新**：每次变更的响应就是**完整的新文档**，直接渲染它。响应是渲染更新，也是失败报告——不需要第二套「回滚」逻辑。
 - **坏文件自愈**：`normalize()` 把任何形状都规整回合法文档（未知字段丢弃、越界数值夹紧、超长名字截断），绝不让侧栏因为一个坏 JSON 而白屏。
 
-## 4. 两条路由
+### 3.1 作用域：一份文档描述一个可见工作区列表
+
+分组只能引用「屏幕上那份列表里存在的 `workspaceId`」。本机列表和远端主机的列表互不相干，所以**一份文档无法同时服务两者**——这也正是接上远端主机后分组全错位的原因。
+
+因此文档按**作用域**拆开存：
+
+| 作用域 | 文件 | 谁在看 |
+| --- | --- | --- |
+| `local` | `state.json` | 本机页面（和以前完全一样，老用户无感） |
+| `<远端 deviceId>` | `state.<deviceId>.json` | 页面连到那台远端主机时 |
+
+- 作用域由浏览器在**每个请求**上用 `?scope=` 指名，缺省/非法一律回落 `local`——旧页面、坏 id 都必须还能拿到一棵能用的树。
+- 作用域键直接进文件路径，所以用 `SCOPE_PATTERN` 白名单校验（`/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/`）：**拒绝而不是清洗**（清洗会悄悄把两个不同的 id 折叠成同一个文件）。
+- 服务端按作用域缓存 store（各自的内存文档 + 各自写队列），上限 `LIMITS.scopes = 32`，超出后新作用域拿到一个即用即丢的 store，进程不会被一个乱造 id 的页面撑爆。
+- `seedGroups` **只播种本机作用域**。它是给这台机器的侧栏铺初始分组的，往每个连过的远端主机里塞同一批是噪音。
+
+### 3.2 远端主机为什么不是「远端存」
+
+`ds-harness-remote` 把第三方插件的路由转发**硬门禁**了：`PLUGIN_ROUTE_ALLOWLIST` 只放行 `api/bot` 与 `api/session/uploadFileBinary`（`dist/plugin-route-bridge.js`），客户端 fetch 拦截器只匹配这两条，宿主端 `callSchema` 再校验一遍。所以本插件的 `/api/workspace-groups/*` **永远不会**被转发到远端主机。上游 issue #186 正在讨论自有的远端插件体系，并明确写着「严禁通过通用 `plugin.route` 绕过」。
+
+诚实地说清楚这意味着什么：分组文档存在**这台机器**的 DSH home 里。换一台电脑连同一台远端主机，看不到这些分组。换来的是「连远端时分组是对的、切回本机分组也还在」，且不依赖上游任何未定型的接口。
+
+### 3.3 页面怎么知道自己在哪个作用域
+
+浏览器半边在首次读取**之前**发一次只读探测：`POST /ds-harness-remote/status`，信封 `{type:'client-request', rpcId, method:'status', payload:{}}`。回包 `result.value.mode` 是 `local`/`remote`，`remote` 时取 `target.deviceId` 作作用域、`target.name` 作标签。
+
+- 探测**永不阻塞也不报错**：404/401/插件没装/超时 → 一律按本机处理（`SCOPE_PROBE_TIMEOUT_MS = 1500` 是硬上限）。这是 fail-soft，不是可用性依赖。
+- 模式切换本身会 `window.location.reload()`（`ds-harness-remote` 自己做的），所以页面内不需要监听模式变化：新页面 boot 一次、探一次、读一次即可。
+- **信的是宿主的回包，不是自己的探测**：Host 会把它实际服务的作用域 `scope` 回显在文档里。若 Host 拒绝/不认这个键（旧版本），回包里是 `local`，页面就立刻退回本机模式——否则它会把本机分组标成「远端主机的」。
+- 远端模式下标题下多一行 `远端主机 · <名字>`。它不是控件、不加图标、不占操作位：本机页面上这行毫无信息量，远端页面上它恰好是唯一需要提醒的事。
+
+
 
 宿主半边在 `ctx.inject(['connection'])` 里注册两条路由：
 
 ```
-GET  /api/workspace-groups/state    → 完整文档
-POST /api/workspace-groups/mutate   → { action, payload } → 完整文档
+GET  /api/workspace-groups/state?scope=<local|deviceId>    → 完整文档
+POST /api/workspace-groups/mutate?scope=<local|deviceId>   → { action, payload } → 完整文档
 ```
 
 - 注册在 Connection 的认证栅栏内：只有这个宿主的页面能读写。
+- `scope` 决定读/写哪一份文档（见 3.1）；非法或缺省 → `local`。
 - 请求体上限 64 KiB（`requestBody: 'buffered'`），JSON 解析失败回 400。
-- 响应带 `cache-control: no-store`。
+- 响应带 `cache-control: no-store`，文档里回显 `scope` 与 `file`（诊断时能看出到底落在了哪个文件）。
 - 没有 `fetch.register` 面（无头组合）时静默跳过——插件仍加载，只是没有路由，浏览器侧会看到读取失败并在提示条里说明。
 
 **为什么不用 `storage-domain`/zod**：这是个 link 安装的 bundle，多一个 peer 依赖就多一个解析失败的可能。直接用 `node:fs` 的四个函数足够，也更容易解释。
@@ -351,7 +383,10 @@ token 分两类，别混用：`--dsw-alias-state-business-primary` 是**交互�
 | **搜索开关** | `test/mount.mjs`：报表头放大镜两次——输入框出现/消失、`aria-label` 跟着翻转、带词关闭时查询词一起清掉 | ✅ |
 | **置顶 / 排序** | `test/mount.mjs`：断言置顶后行真的移到 pinned 区首、pinned 分隔线在、菜单里没有重复的排序子菜单；`test/host.mjs` 覆盖 `orderGroup` 的三种插入规则（拖拽走的就是这条） | ✅ |
 | **「未分组」按条件显示** | `test/mount.mjs`：项目全归组时那一行不在 DOM 里、虚框占位也没了；`dragstart` 之后它**立刻**回来（证明 `dragging` 是 state 而不是 ref）、往它上面 drop 真的 POST `assignWorkspace{groupId:''}`、drop 之后那一段留下而占位消失；全空环境画提示行而不是白板 | ✅ |
-| **实际观感** | 真浏览器页面（本会话的 client inspect 桥超时，无已认证页面） | ❌ 需用户确认 |
+| **作用域隔离** | `test/host.mjs`：本机与远端两个文档是两个文件、互不见对方的写、越权/非法 scope 全部回落 `local`、`seedGroups` 不落到远端、store 缓存上限溢出后仍能读自己的文档 | ✅ |
+| **远端模式（客户端）** | `test/smoke.mjs` 探测信封与 scope 查询串；`test/mount.mjs` 用假 Host 挂载：读的是 `?scope=<deviceId>`、渲染的是远端分组的名字、标题下有主机名一行且该行不是控件、点组头写的也是远端 scope；Host 不认 scope 时立刻退回本机模式 | ✅（假 Host） |
+| **远端模式（真机）** | 本 profile 未连远端主机，无法在真页面上验证一次真实切换 | ❌ 需用户确认 |
+| **实际观感** | 真浏览器页面（本会话的 client inspect 桥超时，无已认证页面）；`--remote` 预览页与 PNG 只证明几何与 token | ❌ 需用户确认 |
 | 真机交互 | 拖动（DnD 无法在 jsdom 里模拟数据载荷）、快捷键、重启后持久化 | ❌ 需用户确认 |
 
 `render` 与 `mount` 用的是真实 React 18 / jsdom，不是手写替身。它们能证明「结构对、内容对、交互路径通、不抛异常」，不能证明「好看」。这一点在 README 和给用户的说明里都写清楚了，不冒充。

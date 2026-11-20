@@ -54,6 +54,13 @@ DSH 的侧栏把每一个工作区平铺成一列。项目一多，这一列就�
 - 分组视图（默认）：上面那棵树。
 - 最近使用：所有对话拉平，按更新时间排序，带所属项目名。
 
+**配合远端主机（ds-harness-remote）**
+
+- 用 [ds-harness-remote](https://github.com/liguobao/ds-harness-remote) 连到远端主机时，侧栏显示的是那台机器的工作区，分组**也跟着换成那台机器的**，不再拿本机的分组去套别人的项目。
+- 每台远端主机一份独立分组（`state.<deviceId>.json`），切回来本机时本机分组原样还在。
+- 远端模式下标题下面多一行「远端主机 · <机器名>」；探测不到 `ds-harness-remote` 时完全静默地按本机处理，不报错、不阻塞。
+- 注意：分组存在**这台电脑**的 DSH home 里，所以换另一台电脑连同一台远端主机看不到这份分组（第三方插件目前拿不到远端主机的 API，详见 [docs/DETAIL.md](docs/DETAIL.md) 3.2）。
+
 **状态徽标**
 
 组头与项目行会汇总子节点的实时状态：待处理（审批/计划/提问）> 运行中 > 新完成，带条目数。不展开也能看出哪个组有事。
@@ -121,6 +128,7 @@ plugin_manager({ action: 'install_bundle', target: 'C:/path/to/workspace-groups'
 - **不改动 DSH 的工作区/对话真值**。插件只保存「哪个项目在哪个组」这类视图元数据，引用的是 `workspaceId`，从不复制目录、移动文件或改写对话。
 - **不接管对话右键菜单**。对话行的右键走的是 DSH 原生菜单（置顶、重命名、Fork、归档、复制 id 都是原生实现），插件只在组头和项目行上提供自己的菜单。
 - **不提供自由取色器**。预设色板保证深浅色主题下都协调；要自由取色请改 `client/client.js` 的 `PALETTE`。
+- **不把分组同步到远端主机**。分组文档存在**这台电脑**上；连远端主机时只是切到「那台主机名下」的那一份（见上面的「配合远端主机」）。
 
 卸载插件后，DSH 的工作区、对话、目录**原样存在**，只是不再分组。
 
@@ -167,6 +175,7 @@ node test/preview.mjs --all-groups    # 全部取消置顶（检查「分组 / �
 node test/preview.mjs --all-pinned    # 全部置顶（检查另一侧的缝）
 node test/preview.mjs --filed         # 每个项目都归了组（「未分组」那一段必须消失）
 node test/preview.mjs --blank         # 一个项目、一个分组都没有（空环境的提示行）
+node test/preview.mjs --remote        # 页面连到远端主机（标题下那行「远端主机 · 名字」）
 ```
 
 - `preview-tree.html`：整棵树的真实渲染
